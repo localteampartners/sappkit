@@ -2,37 +2,45 @@
 
 <!-- UPDATE WHEN: a feature ships, a deploy happens, something breaks, or something gets fixed. This file answers "what's the project like *right now*?" -->
 
-**Last verified:** <!-- FILL IN: YYYY-MM-DD, the date the info below was confirmed -->
+**Last verified:** 2026-08-06
 
 ---
 
 ## What's built and working
 
-- <!-- FILL IN: features that exist and function -->
-- 
-- 
+- Core (`sappkit_core`): KitModel pad mapping (GM-aware, choke/layer/RR
+  reporting), per-pad overrides at the region-policy layer, KitEngine bus
+  (punch/crush/squash/room/width/limiter), deterministic KitRender,
+  SappLink CC map, generated DiagnosticKit.
+- CLI (`build/sappkit`): pads / inspect / validate / params / scan / render —
+  JSON out, seeded determinism. Verified against AVL Black Pearl 5pc
+  (133 regions, 0 missing, correct chokes).
+- Plugin: Standalone/VST3/AU build green; dark-club editor with 4×4 pad grid
+  (names, choke badges, hit flash), pad edit strip (tune/decay/pan/level),
+  kit-bus knobs, meters; async SFZ load; debounced pad rebuild; SappLink
+  CC-in with slew.
+- UiShot: offscreen PNG + `--cctest` (CC 7 sweep through processBlock) — PASS.
+- Tests: 28 Catch2 cases green (chokes, RR, velocity layers, pad mapping,
+  overrides, FX audibility, determinism, SappLink drift guard).
+- Demo: `scripts/make_demo.py` renders an 8-bar groove (ghost notes, hat
+  chokes, SappLink room/crush/squash automation) through the CLI with the
+  AVL kit.
 
 ## What's deployed
 
-- **Environment:** <!-- FILL IN: e.g., "production on VPS (see INFRASTRUCTURE.md)", "local only", "staging at staging.example.com" -->
-- **Version / commit:** <!-- FILL IN: short SHA or tag, if relevant -->
-- **Deployed at:** <!-- FILL IN: YYYY-MM-DD -->
+- **Environment:** local only (macOS). Plugin copied to user plugin dirs by
+  the JUCE copy step on build.
+- **Version / commit:** v0.1.0 initial.
 
 ## What's in progress
 
-- <!-- FILL IN: things actively being worked on but not done -->
-- 
+- Nothing mid-flight; v0.1.0 is a complete vertical slice.
 
 ## What's known broken / flaky
 
-Separate from backlog in TODO.md — these are things that *should* work but don't.
-
-- <!-- FILL IN: e.g., "login breaks on Safari after a 401 refresh" -->
-- 
+- None known. (SM Drums / Big Rusty registry entries are registered but not
+  yet load-tested through the pad mapper — AVL and the diagnostic kit are.)
 
 ## Half-finished or abandoned
 
-Code that exists but isn't wired up. Future-you will be confused by this.
-
-- <!-- FILL IN: e.g., "billing/ directory is a dead prototype, don't use" -->
-- 
+- None.

@@ -9,28 +9,28 @@ For "what's broken," also see CURRENT_STATE.md's known-issues section.
 
 ## Next up (doing soon, in order)
 
-1. <!-- FILL IN -->
-2. 
-3. 
+1. Load-test SM Drums and Big Rusty Drums through the pad mapper (AVL and
+   diagnostic are verified; these two are registered but unexercised).
+2. Kit presets: save/recall pad-override sets + kit-bus settings per SFZ.
+3. VSCO2-CE percussion kit generator (script that writes a GM-mapped SFZ
+   over the raw WAVs — repo has samples only, no SFZ).
 
 ## Backlog (not prioritized)
 
-- <!-- FILL IN -->
-- 
-- 
+- Pad mute/solo on the grid (alt-click).
+- Choke-group editing (override the SFZ's groups per pad).
+- Multi-out (pad → bus routing) for DAW mixing.
+- sapptune end-to-end: groove spec → sappkit render via the manifest tags.
+- Windows/Linux CI build of core+CLI (UiShot/AU stay APPLE-only).
 
 ## Ideas / maybe
 
-Half-formed — might never happen. Keep separate so they don't clutter the backlog.
-
-- <!-- FILL IN -->
-- 
+- "Kit morph" — crossfade two SFZ kits per pad.
+- Velocity-curve knob per pad.
 
 ---
 
 ## Done (recent, rolling)
 
-Keep the last ~10. Older items belong in [CHANGELOG.md](CHANGELOG.md).
-
-- <!-- YYYY-MM-DD — what was done -->
-- 
+- 2026-08-06 — v0.1.0: core + plugin + CLI + tests + UiShot + demo groove;
+  SappLink manifest in sapptune; 3 drum-kit registry entries in sappsounds.

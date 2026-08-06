@@ -11,68 +11,64 @@ The authoritative source for "how do I operate this thing?"
 ### One-time setup
 
 ```bash
-# <!-- FILL IN: clone, install deps, create .env from .env.example, run migrations -->
+# Needs the sibling engine checkout at ~/apps/sappsounds (or it FetchContents
+# from GitHub). Reuse the shared JUCE checkout to skip a 300 MB clone:
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+  -DFETCHCONTENT_SOURCE_DIR_JUCE="$HOME/apps/sappsynth/build/_deps/juce-src"
 ```
 
-### Start the app
+### Build + run the standalone app
 
 ```bash
-# <!-- FILL IN: e.g., npm run dev -->
+cmake --build build -j8 --target SappKitPlugin_Standalone
+open "build/SappKitPlugin_artefacts/Release/Standalone/SappKit.app"
 ```
 
-### Run tests
+VST3/AU: `cmake --build build -j8 --target SappKitPlugin_VST3 SappKitPlugin_AU`
+(the JUCE copy step installs them to the user plugin folders).
+
+### Run tests / fast loop
 
 ```bash
-# <!-- FILL IN -->
+./verify.sh          # core+CLI+tests, under a minute
+```
+
+### UI screenshot (no screen session needed)
+
+```bash
+cmake --build build -j8 --target SappKitUiShot
+./build/SappKitUiShot_artefacts/Release/SappKitUiShot.app/Contents/MacOS/SappKitUiShot /tmp/sappkit-ui.png
+# SappLink end-to-end smoke through the plugin path:
+./build/SappKitUiShot_artefacts/Release/SappKitUiShot.app/Contents/MacOS/SappKitUiShot --cctest
+```
+
+### Fetch kits + render the demo groove
+
+```bash
+~/apps/sappsounds/scripts/fetch-library.sh get avl-drumkits
+python3 scripts/make_demo.py            # → /tmp/sappkit-demo.wav
 ```
 
 ---
 
 ## Deploy
 
-**Hosting:** see [INFRASTRUCTURE.md](INFRASTRUCTURE.md) for the *where*.
-This section is the *how*.
-
-```bash
-# <!-- FILL IN: deploy command or step-by-step -->
-```
+Not deployed anywhere — local instrument. Publishing = pushing to
+`localteampartners/sappkit` on GitHub.
 
 ### Rollback
 
 ```bash
-# <!-- FILL IN: how to revert a bad deploy -->
+git revert <sha>   # or /rollback if a suite-wide snapshot exists
 ```
 
 ---
-
-## Operate (if there's a VPS / running service)
-
-### Check it's alive
-
-```bash
-# <!-- FILL IN: healthcheck URL, or ssh + systemctl status -->
-```
-
-### Restart
-
-```bash
-# <!-- FILL IN -->
-```
-
-### Tail logs
-
-```bash
-# <!-- FILL IN -->
-```
-
----
-
 
 ## Debug checklist
 
-When something's broken, try these in order:
-
-1. <!-- FILL IN: e.g., "check the healthcheck endpoint" -->
-2. <!-- FILL IN: e.g., "tail the last 200 log lines" -->
-3. <!-- FILL IN: e.g., "verify env vars match ENVIRONMENT.md" -->
-4. <!-- FILL IN: e.g., "check external service status pages (see DEPENDENCIES.md)" -->
+1. `./verify.sh` — build or test failure narrows it immediately.
+2. `./build/sappkit inspect --sfz <kit.sfz>` — parser diagnostics,
+   missing-sample list, pad map for a misbehaving library.
+3. `sappkit render --diagnostic` vs `--sfz` — engine issue vs library issue.
+4. UiShot PNG for UI regressions; `--cctest` for SappLink regressions.
+5. Choke/RR oddities: `inspect --regions` and compare group/off_by/seq fields.

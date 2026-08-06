@@ -4,53 +4,79 @@
 
 ## Tech stack
 
-- **Language / runtime:** <!-- FILL IN: e.g., Node 20, Python 3.12, Go 1.22 -->
-- **Framework:** <!-- FILL IN: e.g., Next.js 15, FastAPI, Express -->
-- **Database:** <!-- FILL IN: e.g., Postgres 16, SQLite, none -->
-- **Key libraries:** <!-- FILL IN: only ones that meaningfully shape the code -->
-- **Frontend:** <!-- FILL IN or "n/a" -->
-- **Build / package manager:** <!-- FILL IN: npm, pnpm, uv, cargo -->
+- **Language / runtime:** C++20
+- **Framework:** JUCE 8.0.15 (plugin/UI only — core is framework-free)
+- **Database:** none
+- **Key libraries:** SappSounds (sibling checkout `../sappsounds`, target
+  `Sapp::Sounds`), Catch2 v3.7.1 (tests)
+- **Frontend:** JUCE editor (vector-drawn, "dark club")
+- **Build / package manager:** CMake ≥ 3.24 + FetchContent
 
 ## Components
 
-High-level blocks and what each is responsible for.
-
-- **<!-- FILL IN: component name -->** — <!-- FILL IN: what it does -->
-- 
-- 
+- **sappkit_core** (`src/core/`, no JUCE) — product policy over
+  `sapp::sounds::PlaybackEngine`:
+  - `KitModel` — 16-pad map from an SFZ definition (GM-aware naming,
+    choke/layer/RR reporting) + `applyPadOverrides` (tune/decay/pan/level
+    baked into a rebuilt region set).
+  - `KitEngine` — kit bus: punch → crush → squash → room → width → limiter;
+    humanize/quality hooks into the sampler.
+  - `KitFx.h` — TransientShaper, BusCompressor, Crusher, SmallRoom DSP.
+  - `KitRender` — deterministic offline render, SappLink CC steering.
+  - `SappLinkCCMap` — the CC↔parameter contract (8 kit-bus params).
+  - `DiagnosticKit` — generated in-memory GM kit (chokes, RRs, vel layers)
+    for tests/CLI/plugin default.
+- **sappkit-cli** (`src/cli/`) — agent JSON API: pads / inspect / validate /
+  params / scan / render.
+- **SappKitPlugin** (`src/plugin/`) — JUCE processor (APVTS, async SFZ load,
+  debounced pad-override rebuild, SappLink CC slew) + editor (4×4 pad grid,
+  pad edit strip, kit knobs, meters).
+- **SappKitUiShot** (`tools/uishot/`) — offscreen editor PNG + `--cctest`
+  end-to-end SappLink proof.
 
 ## Data flow
 
-How a request / event moves through the system.
-
 ```
-<!-- FILL IN: ascii diagram, or a numbered list like: -->
-<!-- 1. User hits /api/foo -->
-<!-- 2. Handler validates with Zod, then calls FooService -->
-<!-- 3. FooService reads from Postgres via Drizzle -->
-<!-- 4. Response serialized + returned -->
+MIDI (host / .mid) ──► PlaybackEngine (SappSounds: regions, chokes, RR,
+                        vel layers, humanize)
+                          │ dry stereo
+                          ▼
+             punch → crush → squash ──► SmallRoom ──┐
+                          │ dry                     │ wet × roomLevel
+                          ▼                         ▼
+                        width (M/S) ◄───────────────┘
+                          ▼
+                 master gain → tanh limiter → out
+
+Pad overrides: APVTS pad params ──(debounce timer)──► applyPadOverrides
+  (definition copy, regions retuned/panned/trimmed/gated) ──► engine.setInstrument
+SappLink CC-in: mapped CCs → APVTS slew (plugin) / KitParams (CLI render)
 ```
 
 ## Key directories
 
-Only list directories whose purpose isn't obvious from the name.
-
 | Path | Purpose |
 |---|---|
-| `<!-- FILL IN -->` | <!-- FILL IN --> |
-|  |  |
+| `src/core/` | framework-free kit policy (consumed by plugin, CLI, tests) |
+| `tests/data/` | vendored SappLink manifest (drift-guarded copy of sapptune's) |
+| `tools/uishot/` | offscreen UI screenshot + CC smoke tool |
+| `scripts/` | demo-groove composer/renderer |
 
 ## External touchpoints
 
-What this project talks to across the network. See [DEPENDENCIES.md](DEPENDENCIES.md)
-for account/billing details.
-
-- <!-- FILL IN: e.g., "Stripe API for payments", "OpenAI for embeddings" -->
-- 
+- Sibling repo `~/apps/sappsounds` via `add_subdirectory` (falls back to
+  GitHub FetchContent when absent).
+- `~/apps/sapptune/sapplink/manifests/sappkit.json` — SappLink source of
+  truth; vendored at `tests/data/sapplink-manifest.json`.
+- Sample libraries in `~/Samples/` via sappsounds `fetch-library.sh`
+  (avl-drumkits, sm-drums, big-rusty-drums, vsco2-ce). Never committed.
 
 ## Known sharp edges
 
-Architectural things that will bite someone if they don't know about them.
-
-- <!-- FILL IN: e.g., "Worker must finish within 10s or Cloudflare kills it" -->
-- 
+- `applyPadOverrides` copies the whole `LoadedInstrument` (samples included).
+  Fine for kit-sized libraries; the plugin debounces rebuilds (8 Hz timer) —
+  don't call it per-block or per-knob-tick.
+- Reuse the JUCE checkout when configuring:
+  `-DFETCHCONTENT_SOURCE_DIR_JUCE=~/apps/sappsynth/build/_deps/juce-src`.
+- Parameter IDs (kit + `pad<N>Tune/Decay/Pan/Level`) are compatibility
+  contracts — never reuse or renumber.

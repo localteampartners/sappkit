@@ -2,48 +2,42 @@
 
 <!-- UPDATE WHEN: an external service/API is added or removed, an account changes hands, billing changes, or credentials rotate -->
 
-External systems this project depends on. If access to any of these is lost,
-part or all of the project stops working. This file tells you what to recover.
-
-Runtime library dependencies live in `package.json` / `requirements.txt` /
-similar — don't duplicate them here.
+External systems this project depends on.
 
 ---
 
 ## External services
 
-| Service | What it does | Account (email) | Paid with | Monthly cost | Status page |
-|---|---|---|---|---|---|
-| <!-- e.g., Stripe --> | <!-- e.g., payments --> | <!-- email on the account --> | <!-- card ending 1234 --> | <!-- $X/mo --> | <!-- URL --> |
-|  |  |  |  |  |  |
+None — no hosted services, no billing, no credentials.
 
-## Domain / DNS
+## Sibling repos (build-time)
 
-See [INFRASTRUCTURE.md](INFRASTRUCTURE.md) for the primary domain. If this
-project uses additional domains or subdomains from different registrars, list
-them here.
-
-- <!-- FILL IN or "none" -->
-
-## APIs & credentials
-
-For each external API, point to where the credentials live (never paste them here).
-
-| API | Credential type | Where it lives |
+| Repo | Role | Fallback |
 |---|---|---|
-| <!-- e.g., OpenAI --> | <!-- API key --> | <!-- e.g., "1Password > sappkit > OPENAI_API_KEY" --> |
-|  |  |  |
+| `~/apps/sappsounds` (github.com/localteampartners/sappsounds) | the sampler engine (`Sapp::Sounds`) | FetchContent from GitHub `main` |
+| `~/apps/sapptune` | SappLink manifest source of truth (`sapplink/manifests/sappkit.json`) | vendored copy in `tests/data/` keeps CI honest |
+
+## Fetched libraries (build-time, pinned)
+
+- JUCE 8.0.15 (GitHub tag; reuse `~/apps/sappsynth/build/_deps/juce-src`)
+- Catch2 v3.7.1
+
+## Sample libraries (runtime, user-fetched, never committed)
+
+Via `~/apps/sappsounds/scripts/fetch-library.sh` into `~/Samples/`:
+
+| Name | License | Notes |
+|---|---|---|
+| avl-drumkits | CC-BY-SA | Black Pearl / Red Zeppelin kits — verified with the pad mapper |
+| sm-drums | royalty-free | SM MegaReaper, deep velocity layers + 4 RR |
+| big-rusty-drums | CC0 | Karoryfer character kit |
+| vsco2-ce | CC0 | orchestral percussion (raw WAVs — needs generated SFZ) |
 
 ## Single points of failure
 
-If any one of these goes down or we lose access, what breaks?
-
-- <!-- FILL IN: e.g., "Stripe down → checkout broken (read-only mode still works)" -->
-- 
+- Sample-library hosts (bandshed.net zip, GitHub repos) going away would
+  break *fetching*, not existing installs. Licenses permit local mirrors.
 
 ## Account recovery
 
-Who / what can recover access if the primary account is locked out?
-
-- <!-- FILL IN: e.g., "all provider accounts use localteampartners@gmail.com; recovery email is X" -->
-- 
+- GitHub org `localteampartners` — localteampartners@gmail.com.
