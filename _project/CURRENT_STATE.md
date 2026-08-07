@@ -19,6 +19,11 @@
   (names, choke badges, hit flash), pad edit strip (tune/decay/pan/level),
   kit-bus knobs, meters; async SFZ load; debounced pad rebuild; SappLink
   CC-in with slew.
+- GET SOUNDS overlay (ported from sapporchestra's SoundsPanel): one-click
+  download+extract of curated drum libraries (AVL Drumkits, Big Rusty Drums,
+  SM MegaReaper, VSCO 2 CE percussion) into the shared `~/Samples` root, plus
+  an installed-kit browser (recursive .sfz scan, filter/category,
+  double-click loads through the normal pad-mapping path).
 - UiShot: offscreen PNG + `--cctest` (CC 7 sweep through processBlock) — PASS.
 - Tests: 28 Catch2 cases green (chokes, RR, velocity layers, pad mapping,
   overrides, FX audibility, determinism, SappLink drift guard).

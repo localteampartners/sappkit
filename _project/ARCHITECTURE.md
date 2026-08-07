@@ -30,7 +30,8 @@
   params / scan / render.
 - **SappKitPlugin** (`src/plugin/`) — JUCE processor (APVTS, async SFZ load,
   debounced pad-override rebuild, SappLink CC slew) + editor (4×4 pad grid,
-  pad edit strip, kit knobs, meters).
+  pad edit strip, kit knobs, meters) + GET SOUNDS overlay (`SoundsPanel`:
+  curated drum-library downloads + installed-kit browser over `~/Samples`).
 - **SappKitUiShot** (`tools/uishot/`) — offscreen editor PNG + `--cctest`
   end-to-end SappLink proof.
 

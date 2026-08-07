@@ -13,6 +13,8 @@
 
 namespace sappkit {
 
+class SoundsPanel;
+
 // ------------------------------------------------------------------ palette --
 namespace palette {
 const juce::Colour background{0xff0b0b10};   // near-black blue
@@ -101,6 +103,11 @@ private:
     juce::Label title_, subtitle_, instrumentName_, status_;
     juce::TextButton loadButton_{"LOAD SFZ"};
     juce::TextButton diagButton_{"BUILT-IN KIT"};
+    juce::TextButton soundsButton_{"GET SOUNDS"};
+
+    std::unique_ptr<SoundsPanel> soundsPanel_;
+    SoundsPanel& ensureSoundsPanel();
+    void openSoundsPanel();
 
     juce::Label padsHeader_, busHeader_, editHeader_;
 

@@ -3,7 +3,7 @@
 <!-- UPDATE WHEN: starting a multi-step task (write the plan BEFORE the first edit), after each completed step (tick it), the moment a gotcha is hit or an approach is ruled out, and when the work ships (reset this file — durable facts graduate to CURRENT_STATE.md / CHANGELOG.md per the routing table) -->
 
 **Work in flight:** none <!-- or: yes — <one line>. Keep this accurate; /resume reads it first. -->
-**Last updated:** <!-- YYYY-MM-DD HH:MM -->
+**Last updated:** 2026-08-06
 
 The session-continuity journal. If a session dies, compacts, or moves to
 another machine, this file **is** the working context — a brand-new session
@@ -32,7 +32,8 @@ must be able to resume from it alone, without the old transcript. Update it
 
 <!-- The expensive-to-relearn stuff: gotchas hit, dead ends already ruled out, constraints found mid-task. A new session must not re-pay for these. Durable workflow rules also go to CONVENTIONS.md. -->
 
--
+- Worktree plugin builds can reuse the shared JUCE checkout:
+  `-DFETCHCONTENT_SOURCE_DIR_JUCE=/Users/michael/apps/sappsynth/build/_deps/juce-src`.
 
 ## Next step
 

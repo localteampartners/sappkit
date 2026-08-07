@@ -12,6 +12,18 @@ Newest first. Format: `## YYYY-MM-DD — short title`, then bullets.
 
 ---
 
+## 2026-08-06 — GET SOUNDS in-plugin downloader
+
+- Ported sapporchestra's SoundsPanel: GET SOUNDS header button opens a
+  dark-club overlay with one-click download → extract → rescan for curated
+  drum libraries (AVL Drumkits 29 MB, Big Rusty Drums 600 MB, SM MegaReaper
+  2.2 GB, VSCO 2 CE percussion 3.3 GB) and an installed-kit browser
+  (recursive .sfz scan of the shared `~/Samples` root, filter + category,
+  double-click to load). Samples root is shared with the other Sapp
+  instruments via `Sapp/SampleLibraries.settings`.
+
+---
+
 ## 2026-08-06 — v0.1.0 initial build
 
 - sappkit_core: KitModel (16-pad GM-aware map + region-policy overrides),

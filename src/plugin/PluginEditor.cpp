@@ -1,5 +1,7 @@
 #include "PluginEditor.h"
 
+#include "SoundsPanel.h"
+
 namespace sappkit {
 
 namespace {
@@ -268,6 +270,8 @@ SappKitEditor::SappKitEditor(SappKitProcessor& processor)
     addAndMakeVisible(loadButton_);
     diagButton_.onClick = [this] { processor_.loadDiagnosticKit(); };
     addAndMakeVisible(diagButton_);
+    soundsButton_.onClick = [this] { openSoundsPanel(); };
+    addAndMakeVisible(soundsButton_);
 
     auto header = [&](juce::Label& label, const juce::String& text) {
         label.setText(text, juce::dontSendNotification);
@@ -345,6 +349,24 @@ SappKitEditor::~SappKitEditor()
     processor_.keyboardState.removeListener(this);
     processor_.onInstrumentChanged = nullptr;
     setLookAndFeel(nullptr);
+}
+
+SoundsPanel& SappKitEditor::ensureSoundsPanel()
+{
+    if (soundsPanel_ == nullptr) {
+        soundsPanel_ = std::make_unique<SoundsPanel>(
+            processor_, [this] { soundsPanel_->setVisible(false); });
+        addChildComponent(*soundsPanel_);
+    }
+    return *soundsPanel_;
+}
+
+void SappKitEditor::openSoundsPanel()
+{
+    auto& panel = ensureSoundsPanel();
+    panel.setBounds(getLocalBounds().reduced(14));
+    panel.setVisible(true);
+    panel.toFront(true);
 }
 
 void SappKitEditor::chooseSfz()
@@ -496,8 +518,11 @@ void SappKitEditor::resized()
     subtitle_.setBounds(s(21), s(40), s(220), s(16));
     loadButton_.setBounds(s(250), s(18), s(92), s(28));
     diagButton_.setBounds(s(348), s(18), s(104), s(28));
+    soundsButton_.setBounds(s(458), s(18), s(104), s(28));
     instrumentName_.setBounds(getWidth() - s(380), s(10), s(364), s(24));
     status_.setBounds(getWidth() - s(380), s(34), s(364), s(18));
+    if (soundsPanel_ != nullptr)
+        soundsPanel_->setBounds(getLocalBounds().reduced(14));
 
     // Pad grid: MPC orientation — pad 1 bottom-left, pad 16 top-right.
     padsHeader_.setBounds(s(26), s(82), s(120), s(16));

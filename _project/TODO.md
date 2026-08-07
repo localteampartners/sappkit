@@ -32,5 +32,7 @@ For "what's broken," also see CURRENT_STATE.md's known-issues section.
 
 ## Done (recent, rolling)
 
+- 2026-08-06 — GET SOUNDS in-plugin downloader (ported from sapporchestra):
+  4 curated drum libraries + installed-kit browser.
 - 2026-08-06 — v0.1.0: core + plugin + CLI + tests + UiShot + demo groove;
   SappLink manifest in sapptune; 3 drum-kit registry entries in sappsounds.
