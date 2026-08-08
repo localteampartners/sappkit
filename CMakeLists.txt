@@ -113,6 +113,7 @@ if(SAPPKIT_BUILD_PLUGIN)
     src/plugin/PluginEditor.cpp
     src/plugin/FactoryKits.cpp
     src/plugin/SoundsPanel.cpp
+    src/plugin/UserPresets.cpp
   )
   target_link_libraries(SappKitPlugin PRIVATE
     sappkit_core
@@ -138,6 +139,7 @@ if(SAPPKIT_BUILD_PLUGIN)
       src/plugin/PluginEditor.cpp
       src/plugin/FactoryKits.cpp
       src/plugin/SoundsPanel.cpp
+      src/plugin/UserPresets.cpp
     )
     target_include_directories(SappKitUiShot PRIVATE src/plugin)
     target_link_libraries(SappKitUiShot PRIVATE

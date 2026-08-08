@@ -6,6 +6,32 @@ Newest first. Format: `## YYYY-MM-DD — short title`, then bullets.
 
 ---
 
+## 2026-08-08 (later still) — user presets
+
+- **USER PRESETS.** SappKit now saves and loads sounds in the suite-wide
+  SappLink preset format (`sapptune/sapplink/PRESETS.md`): plain JSON in
+  `<Documents>/SappSounds/presets/sappkit/<name>.json`, normalised 0..1
+  values, addressed by NAME so they can never collide with the factory
+  program bank. `src/plugin/UserPresets.{h,cpp}` is the shared,
+  instrument-agnostic implementation, copied verbatim from sappsynth.
+- A sappkit preset is the parameter state (10 kit-bus + 4 per pad) PLUS the
+  kit it was captured with: the loaded `.sfz` path travels in the preset's
+  optional `sfz` field and is reloaded on the way back in. When the path no
+  longer resolves the parameters still apply, to whatever kit is loaded, and
+  the footer says so.
+- New host-automatable `preset` `AudioParameterChoice` — factory kits in
+  program order, then the user presets found at construction. Added LAST in
+  the layout: no existing parameter id, index, or CC assignment moved. It
+  carries no CC of its own and is declared under `hostParameters` (not
+  `parameters`) in the SappLink manifest.
+- Editor footer: PRESETS (factory kits + your saved sounds, rescanned every
+  time the menu opens) and SAVE SOUND (async name prompt), with the outcome
+  shown beside them.
+- Loading a preset neither triggers nor gets clobbered by the per-kit mix
+  save/restore machinery (it arms the same suppression a fresh kit load does).
+- `SappKitUiShot --presettest` proves the round trip headlessly: 74/74
+  parameters restored, max |diff| exactly 0.
+
 ## 2026-08-08 (later)
 
 - **Latin percussion kit + Latin grooves.** New one-click library in GET

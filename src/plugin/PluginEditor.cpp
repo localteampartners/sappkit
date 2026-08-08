@@ -273,6 +273,22 @@ SappKitEditor::SappKitEditor(SappKitProcessor& processor)
     soundsButton_.onClick = [this] { openSoundsPanel(); };
     addAndMakeVisible(soundsButton_);
 
+    presetsButton_.setTooltip("Load a factory kit or one of your saved sounds");
+    presetsButton_.onClick = [this] { showPresetMenu(); };
+    addAndMakeVisible(presetsButton_);
+
+    savePresetButton_.setTooltip(
+        "Save the current kit and mix as a user preset in " +
+        sapp::userpresets::presetDir(SappKitProcessor::kInstrument).getFullPathName());
+    savePresetButton_.onClick = [this] { promptSaveUserPreset(); };
+    addAndMakeVisible(savePresetButton_);
+
+    presetStatus_.setFont(uiFont(10.5f));
+    presetStatus_.setColour(juce::Label::textColourId, palette::cyan);
+    presetStatus_.setJustificationType(juce::Justification::centredRight);
+    presetStatus_.setMinimumHorizontalScale(0.6f);
+    addAndMakeVisible(presetStatus_);
+
     auto header = [&](juce::Label& label, const juce::String& text) {
         label.setText(text, juce::dontSendNotification);
         label.setFont(uiFont(10.5f, true));
@@ -405,6 +421,98 @@ void SappKitEditor::chooseSfz()
                               });
 }
 
+// ------------------------------------------------------------ user presets --
+
+namespace {
+// Menu ids: factory kits first, user presets above them.
+constexpr int kFactoryMenuBase = 1000;
+constexpr int kUserMenuBase = 2000;
+} // namespace
+
+void SappKitEditor::showPresetMenu()
+{
+    // Fresh scan every time the menu opens, so a sound saved this session is
+    // loadable immediately — the automatable `preset` parameter's choice list
+    // stays fixed until the next instantiation (sapplink/PRESETS.md §3).
+    juce::StringArray userNames;
+    for (const auto& preset : processor_.userPresets())
+        userNames.add(preset.name);
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader("FACTORY KITS");
+    for (int i = 0; i < processor_.getNumPrograms(); ++i)
+        menu.addItem(kFactoryMenuBase + i, processor_.getProgramName(i), true,
+                     processor_.getCurrentProgram() == i);
+    menu.addSeparator();
+    menu.addSectionHeader("YOUR SOUNDS");
+    if (userNames.isEmpty())
+        menu.addItem(1, "(none yet - press SAVE SOUND)", false, false);
+    else
+        for (int i = 0; i < userNames.size(); ++i)
+            menu.addItem(kUserMenuBase + i, userNames[i] + " (user)");
+
+    juce::Component::SafePointer<SappKitEditor> safe(this);
+    menu.showMenuAsync(juce::PopupMenu::Options()
+                           .withTargetComponent(presetsButton_)
+                           .withMinimumWidth(210),
+                       [safe, userNames](int result) {
+                           if (safe == nullptr || result < kFactoryMenuBase)
+                               return;
+                           if (result >= kUserMenuBase) {
+                               juce::String error;
+                               if (!safe->processor_.loadUserPreset(
+                                       userNames[result - kUserMenuBase], error))
+                                   juce::NativeMessageBox::showAsync(
+                                       juce::MessageBoxOptions()
+                                           .withIconType(juce::MessageBoxIconType::WarningIcon)
+                                           .withTitle("SappKit")
+                                           .withMessage(error)
+                                           .withButton("OK"),
+                                       nullptr);
+                           } else {
+                               safe->processor_.applyPresetChoice(result - kFactoryMenuBase);
+                           }
+                       });
+}
+
+void SappKitEditor::promptSaveUserPreset()
+{
+    // Async throughout: a plugin editor must never spin a modal loop.
+    saveWindow_ = std::make_unique<juce::AlertWindow>(
+        "SAVE SOUND",
+        "Kit + mix, saved to " +
+            sapp::userpresets::presetDir(SappKitProcessor::kInstrument).getFullPathName(),
+        juce::MessageBoxIconType::NoIcon);
+    saveWindow_->addTextEditor("name", processor_.currentInstrumentName(), "Name");
+    saveWindow_->addButton("SAVE", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    saveWindow_->addButton("CANCEL", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    juce::Component::SafePointer<SappKitEditor> safe(this);
+    saveWindow_->enterModalState(
+        true, juce::ModalCallbackFunction::create([safe](int result) {
+            if (safe == nullptr || safe->saveWindow_ == nullptr)
+                return;
+            const auto name = safe->saveWindow_->getTextEditorContents("name").trim();
+            safe->saveWindow_.reset();
+            if (result != 1 || name.isEmpty())
+                return;
+
+            juce::String error;
+            // The outcome shows in the footer either way; a failure also gets
+            // a box, because a sound the user thinks they saved and did not is
+            // the one thing they must not miss.
+            if (!safe->processor_.saveUserPreset(name, {}, error))
+                juce::NativeMessageBox::showAsync(
+                    juce::MessageBoxOptions()
+                        .withIconType(juce::MessageBoxIconType::WarningIcon)
+                        .withTitle("SappKit")
+                        .withMessage(error)
+                        .withButton("OK"),
+                    nullptr);
+        }),
+        true);
+}
+
 void SappKitEditor::rebuildPads()
 {
     const auto model = processor_.kitModel();
@@ -459,6 +567,7 @@ void SappKitEditor::timerCallback()
 {
     status_.setText(processor_.loadStatus(), juce::dontSendNotification);
     instrumentName_.setText(processor_.currentInstrumentName(), juce::dontSendNotification);
+    presetStatus_.setText(processor_.presetStatus(), juce::dontSendNotification);
 
     // Flash pads whose notes fired since the last tick; decay the rest.
     for (int i = 0; i < sapp::kit::kNumPads; ++i) {
@@ -617,6 +726,9 @@ void SappKitEditor::resized()
     voicesLabel_.setBounds(s(16), s(514), s(90), s(20));
     versionButton_.setBounds(s(270), s(512), s(170), s(24));
     updateButton_.setBounds(s(446), s(511), s(150), s(26));
+    presetsButton_.setBounds(s(600), s(511), s(92), s(26));
+    savePresetButton_.setBounds(s(698), s(511), s(112), s(26));
+    presetStatus_.setBounds(s(816), s(510), s(148), s(26));
     meterArea_ = {s(110), s(518), s(170), s(14)};
 }
 

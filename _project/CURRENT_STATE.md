@@ -38,7 +38,16 @@
   SM MegaReaper, VSCO 2 CE percussion) into the shared `~/Samples` root, plus
   an installed-kit browser (recursive .sfz scan, filter/category,
   double-click loads through the normal pad-mapping path).
-- UiShot: offscreen PNG + `--cctest` (CC 7 sweep through processBlock) — PASS.
+- User presets (SappLink format, `sapptune/sapplink/PRESETS.md`): SAVE SOUND
+  captures the parameter state plus the loaded kit's `.sfz` path to
+  `<Documents>/SappSounds/presets/sappkit/<name>.json`; PRESETS loads a saved
+  sound (reloading its kit) or a factory kit. Also drivable from a host lane
+  via the `preset` AudioParameterChoice (added last in the layout; no existing
+  parameter moved). A preset load suppresses the per-kit mix auto-save so the
+  two systems can't fight.
+- UiShot: offscreen PNG + `--cctest` (CC 7 sweep through processBlock) — PASS,
+  and `--presettest` (user-preset round trip end to end) — PASS, 74/74
+  parameters restored with max |diff| exactly 0.
 - Tests: 28 Catch2 cases green (chokes, RR, velocity layers, pad mapping,
   overrides, FX audibility, determinism, SappLink drift guard).
 - Demo: `scripts/make_demo.py` renders an 8-bar groove (ghost notes, hat

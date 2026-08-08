@@ -16,12 +16,19 @@
 #include "../core/KitEngine.h"
 #include "../core/KitMix.h"
 #include "../core/KitModel.h"
+#include "UserPresets.h"
 
 namespace sappkit {
 
-class SappKitProcessor : public juce::AudioProcessor, private juce::Timer
+class SappKitProcessor : public juce::AudioProcessor,
+                         private juce::AudioProcessorValueTreeState::Listener,
+                         private juce::Timer
 {
 public:
+    // The SappLink instrument name: names the user-preset folder and must
+    // match sapplink/manifests/sappkit.json.
+    static constexpr const char* kInstrument = "sappkit";
+
     SappKitProcessor();
     ~SappKitProcessor() override;
 
@@ -53,6 +60,38 @@ public:
 
     // Load factory kit program N now. Message thread only.
     void applyKitProgram(int index);
+
+    // ---------------------------------------------------------- user presets --
+    // Saved sounds, shared format across the suite (sapplink/PRESETS.md).
+    // Factory kits stay addressed by program index; user presets are addressed
+    // by NAME, so the two can never collide.
+    //
+    // A sappkit "sound" is the parameter state (10 kit-bus params + 4 per pad)
+    // PLUS the kit it was captured with: the pad params only mean anything
+    // against that pad map. The kit travels in the preset's optional `sfz`
+    // field and is reloaded on the way in when the path still resolves.
+
+    // Capture the current parameter state + loaded kit path to
+    // <Documents>/SappSounds/presets/sappkit/<name>.json. Message thread.
+    bool saveUserPreset(const juce::String& name, const juce::String& notes, juce::String& error);
+
+    // Load a user preset by name (case-insensitive). Message thread.
+    bool loadUserPreset(const juce::String& name, juce::String& error);
+
+    // Fresh scan of the user preset folder.
+    std::vector<sapp::userpresets::UserPreset> userPresets() const;
+
+    // Choice-list geometry of the `preset` parameter: [0, factoryPresetCount)
+    // are factory kit programs, the rest are the user presets discovered when
+    // this instance was constructed.
+    int factoryPresetCount() const;
+
+    // Apply choice N of the `preset` parameter. Message thread.
+    void applyPresetChoice(int index);
+
+    // Last preset save/load outcome, for the editor to show. Any thread.
+    juce::String presetStatus() const;
+    void setPresetStatus(const juce::String& message);
 
     void getStateInformation(juce::MemoryBlock& destData) override;
     void setStateInformation(const void* data, int sizeInBytes) override;
@@ -94,6 +133,7 @@ private:
                     uint64_t generation);
     void rebuildOverriddenInstrument();
     void applySavedMixOrDefaults();     // message thread, after a fresh load
+    void applyUserPresetParams(const sapp::userpresets::UserPreset& preset);
     void setParamValue(const juce::String& paramId, float plainValue);
     std::array<float, 10> readBusValues() const;
     void saveMixNow();
@@ -133,6 +173,17 @@ private:
     // triggered from the timer (message thread), sappstep-style.
     std::atomic<int> pendingProgram_{-1};
     std::atomic<int> currentProgram_{0};
+
+    // The `preset` parameter (sapplink/PRESETS.md section 3) can be moved from
+    // the audio thread by host automation, so its listener only stores an
+    // index — the same 8 Hz timer that already defers program changes does the
+    // loading. applyingPreset_ is set while WE move the parameter, so keeping
+    // it in sync after a kit change never re-enters the load.
+    void parameterChanged(const juce::String& parameterId, float newValue) override;
+    std::atomic<int> pendingPresetChoice_{-1};
+    bool applyingPreset_ = false;
+    void syncPresetParameter(int choiceIndex);
+    juce::String presetStatus_;         // guarded by loadLock_
 
     // Instrument state (message thread + load thread under loadLock_).
     juce::String sfzPath_;                 // "" = diagnostic kit

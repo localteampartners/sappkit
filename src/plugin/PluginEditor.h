@@ -98,6 +98,11 @@ private:
     void selectPad(int index);
     void chooseSfz();
 
+    // User presets (sapplink/PRESETS.md): PRESETS lists the factory kits and
+    // every saved sound, SAVE SOUND captures the current kit + mix by name.
+    void showPresetMenu();
+    void promptSaveUserPreset();
+
     SappKitProcessor& processor_;
     KitLookAndFeel lookAndFeel_;
 
@@ -105,6 +110,10 @@ private:
     juce::TextButton loadButton_{"LOAD SFZ"};
     juce::TextButton diagButton_{"BUILT-IN KIT"};
     juce::TextButton soundsButton_{"GET SOUNDS"};
+    juce::TextButton presetsButton_{"PRESETS"};
+    juce::TextButton savePresetButton_{"SAVE SOUND"};
+    juce::Label presetStatus_;
+    std::unique_ptr<juce::AlertWindow> saveWindow_;
 
     std::unique_ptr<SoundsPanel> soundsPanel_;
     SoundsPanel& ensureSoundsPanel();

@@ -60,6 +60,21 @@ juce::AudioProcessorValueTreeState::ParameterLayout SappKitProcessor::makeLayout
         layout.add(std::make_unique<P>(juce::ParameterID{padParamId(pad, "Level"), 1},
                                        n + "Level", Range{-24.0f, 12.0f, 0.1f}, 0.0f));
     }
+
+    // Host-automatable sound selection (sapplink/PRESETS.md section 3). ADDED
+    // LAST so no existing parameter index moves — ids, order and CC mappings
+    // are a contract with the SappLink manifest and with saved DAW sessions.
+    // The factory kits in program order, then the user presets that exist
+    // right now; the list is fixed for this instance's lifetime because a
+    // choice parameter cannot change its choices without breaking automation
+    // lanes. It carries no CC of its own.
+    juce::StringArray presetChoices;
+    for (const auto& kit : factorykits::all())
+        presetChoices.add(kit.name);
+    presetChoices.addArray(sapp::userpresets::choiceLabels(SappKitProcessor::kInstrument));
+    layout.add(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID{sapp::userpresets::kPresetParamId, 1}, "Preset", presetChoices, 0));
+
     return layout;
 }
 
@@ -91,11 +106,19 @@ SappKitProcessor::SappKitProcessor()
     for (size_t i = 0; i < table.size(); ++i)
         ccSlews_[i].parameter = apvts_.getParameter(table[i].paramId);
 
+    // Host-automatable sound selection (sapptune issue #13). The callback can
+    // arrive on the audio thread; it only stores an index.
+    apvts_.addParameterListener(sapp::userpresets::kPresetParamId, this);
+
     loadDiagnosticKit();
     startTimerHz(8);   // debounced pad-override rebuild
 }
 
-SappKitProcessor::~SappKitProcessor() { stopTimer(); }
+SappKitProcessor::~SappKitProcessor()
+{
+    stopTimer();
+    apvts_.removeParameterListener(sapp::userpresets::kPresetParamId, this);
+}
 
 // -------------------------------------------------------- factory programs --
 
@@ -132,6 +155,7 @@ void SappKitProcessor::applyKitProgram(int index)
     if (index == 0) {
         currentProgram_.store(0);
         loadDiagnosticKit();
+        syncPresetParameter(0);
         updateHostDisplay(ChangeDetails{}.withProgramChanged(true));
         return;
     }
@@ -145,7 +169,145 @@ void SappKitProcessor::applyKitProgram(int index)
     currentProgram_.store(index);
     if (sfz.getFullPathName() != sfzPath_)
         loadSfzInstrument(sfz);
+    // Keep the `preset` chooser following the kit however the kit was picked
+    // (MIDI program change, host program API, the chooser itself). Loading a
+    // kit does NOT reset parameters to defaults here — applySavedMixOrDefaults
+    // touches only the 10 kit-bus ids and the pad ids — so unlike sappsynth
+    // there is no "reset everything" loop that could clobber the chooser.
+    syncPresetParameter(index);
     updateHostDisplay(ChangeDetails{}.withProgramChanged(true));
+}
+
+// ------------------------------------------------------------ user presets --
+
+int SappKitProcessor::factoryPresetCount() const
+{
+    return int(factorykits::all().size());
+}
+
+std::vector<sapp::userpresets::UserPreset> SappKitProcessor::userPresets() const
+{
+    return sapp::userpresets::scan(kInstrument);
+}
+
+juce::String SappKitProcessor::presetStatus() const
+{
+    const juce::ScopedLock sl(loadLock_);
+    return presetStatus_;
+}
+
+void SappKitProcessor::setPresetStatus(const juce::String& message)
+{
+    const juce::ScopedLock sl(loadLock_);
+    presetStatus_ = message;
+}
+
+bool SappKitProcessor::saveUserPreset(const juce::String& name, const juce::String& notes,
+                                      juce::String& error)
+{
+    auto preset = sapp::userpresets::capture(*this, name.trim(), notes);
+    // capture() is instrument-agnostic and knows nothing about samples, so the
+    // kit hint is filled in here: a sappkit sound is the parameter state PLUS
+    // the kit it was captured against (PRESETS.md section 1, optional `sfz`).
+    // Empty path = the built-in diagnostic kit, i.e. no hint.
+    {
+        const juce::ScopedLock sl(loadLock_);
+        preset.sfz = sfzPath_;
+    }
+    juce::File written;
+    const bool ok = sapp::userpresets::save(preset, kInstrument, written, error);
+    setPresetStatus(ok ? "saved \"" + preset.name + "\"" : "save failed: " + error);
+    return ok;
+}
+
+bool SappKitProcessor::loadUserPreset(const juce::String& name, juce::String& error)
+{
+    const auto preset = sapp::userpresets::findByName(kInstrument, name);
+    if (!preset.has_value()) {
+        error = "no user preset named \"" + name + "\" in " +
+                sapp::userpresets::presetDir(kInstrument).getFullPathName();
+        setPresetStatus("no preset named \"" + name + "\"");
+        return false;
+    }
+
+    juce::String note;
+    if (preset->sfz.isNotEmpty()) {
+        juce::String current;
+        {
+            const juce::ScopedLock sl(loadLock_);
+            current = sfzPath_;
+        }
+        const juce::File kit(preset->sfz);
+        if (kit.existsAsFile()) {
+            if (kit.getFullPathName() != current) {
+                // The preset carries the whole mix, so the incoming kit must
+                // NOT overwrite it from its own saved-mix file — exactly the
+                // deal a host state restore gets.
+                restorePending_ = true;
+                loadSfzInstrument(kit);
+            }
+        } else {
+            // PRESETS.md: an `sfz` hint that does not resolve is ignored. The
+            // parameters still apply, to whatever kit is loaded.
+            note = " - kit missing, applied to current kit";
+        }
+    }
+
+    applyUserPresetParams(*preset);
+    setPresetStatus("loaded \"" + preset->name + "\"" + note);
+    return true;
+}
+
+void SappKitProcessor::applyUserPresetParams(const sapp::userpresets::UserPreset& preset)
+{
+    // The mix machinery watches parameters and writes the CURRENT kit's mix
+    // file ~2 s after they move. A preset load is not a mix edit, so arm the
+    // same suppression a fresh kit load uses: the timer's next quiet tick
+    // clears it, and only genuine user tweaks after that arm a save again.
+    // lastBusValid_ = false likewise stops this jump counting as a bus edit.
+    suppressMixSave_ = true;
+    mixSaveCountdown_ = -1;
+    lastBusValid_ = false;
+    sapp::userpresets::apply(preset, apvts_);
+}
+
+void SappKitProcessor::applyPresetChoice(int index)
+{
+    if (index < 0)
+        return;
+    if (index < factoryPresetCount()) {
+        applyKitProgram(index);
+        return;
+    }
+    // Beyond the factory bank the entry is a user preset: resolve the choice
+    // label back to a name and load from disk, so the file stays the source of
+    // truth even if it changed since this instance was constructed.
+    auto* choice = dynamic_cast<juce::AudioParameterChoice*>(
+        apvts_.getParameter(sapp::userpresets::kPresetParamId));
+    if (choice == nullptr || index >= choice->choices.size())
+        return;
+    juce::String error;
+    loadUserPreset(sapp::userpresets::nameFromChoiceLabel(choice->choices[index]), error);
+    syncPresetParameter(index);
+}
+
+void SappKitProcessor::syncPresetParameter(int choiceIndex)
+{
+    auto* choice = dynamic_cast<juce::AudioParameterChoice*>(
+        apvts_.getParameter(sapp::userpresets::kPresetParamId));
+    if (choice == nullptr || choiceIndex < 0 || choiceIndex >= choice->choices.size())
+        return;
+    if (choice->getIndex() == choiceIndex)
+        return;
+    const juce::ScopedValueSetter<bool> guard(applyingPreset_, true);
+    choice->setValueNotifyingHost(choice->convertTo0to1(float(choiceIndex)));
+}
+
+void SappKitProcessor::parameterChanged(const juce::String& parameterId, float newValue)
+{
+    if (applyingPreset_ || parameterId != sapp::userpresets::kPresetParamId)
+        return;
+    pendingPresetChoice_.store(int(newValue));
 }
 
 // ----------------------------------------------------------- SappLink CC-in --
@@ -293,6 +455,12 @@ void SappKitProcessor::timerCallback()
     const int program = pendingProgram_.exchange(-1);
     if (program >= 0)
         applyKitProgram(program);
+
+    // Deferred apply of the host-automatable `preset` chooser (same rule: the
+    // listener may fire on the audio thread, the load happens here).
+    const int choice = pendingPresetChoice_.exchange(-1);
+    if (choice >= 0)
+        applyPresetChoice(choice);
 
     // Debounce: pad knob turns change APVTS params; every tick we compare to
     // the overrides last baked into the playing instrument and rebuild off
