@@ -91,3 +91,13 @@ TEST_CASE("pad overrides flow through the offline render", "[render]")
 
     CHECK(reference.rms > trimmed.rms * 6.0f);
 }
+
+#include "core/VersionCompare.h"
+
+TEST_CASE("updater version comparison", "[updater]")
+{
+    CHECK(sapp::kit::isNewerVersion("v0.3.1", "0.3.0"));
+    CHECK(sapp::kit::isNewerVersion("v1.0.0", "0.9.9"));
+    CHECK_FALSE(sapp::kit::isNewerVersion("v0.3.0", "0.3.0"));
+    CHECK_FALSE(sapp::kit::isNewerVersion("v0.2.9", "0.3.0"));
+}

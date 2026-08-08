@@ -72,3 +72,9 @@ git revert <sha>   # or /rollback if a suite-wide snapshot exists
 3. `sappkit render --diagnostic` vs `--sfz` — engine issue vs library issue.
 4. UiShot PNG for UI regressions; `--cctest` for SappLink regressions.
 5. Choke/RR oddities: `inspect --regions` and compare group/off_by/seq fields.
+
+## Release rule (in-plugin updater)
+
+Bump `project(SappKit VERSION X.Y.Z)` in CMakeLists.txt to match every
+release tag — the in-plugin updater compares JucePlugin_VersionString
+against the latest GitHub tag, so the two MUST stay in sync.
