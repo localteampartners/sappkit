@@ -62,3 +62,16 @@ Same rationale as sapporchestra (see its DECISIONS.md): generic sampler code
 lives in SappSounds; JUCE 8.0.15 pinned to match sappsynth/sapporchestra;
 the agent API is a JSON CLI, not a socket; the SappLink table lives in core
 with a vendored-manifest drift test.
+
+## 2026-08-07 — Self-update via GitHub releases, versioned by the CMake project
+
+The plugin updates itself from the repo's *latest GitHub release* rather
+than a separate update feed: CI already attaches Windows-x64 and
+macOS-universal zips to every tag, so the release IS the feed. The
+installed version is `JucePlugin_VersionString`, which JUCE derives from
+`project(SappKit VERSION ...)` — therefore the CMake version MUST be
+bumped with every release tag (RUNBOOK rule) or the updater goes blind.
+Daily check throttled through the shared Sapp settings file (one file for
+the whole product family, per-product key `lastUpdateCheck-sappkit`).
+Windows can't overwrite a loaded DLL but can rename it: old .vst3 is
+parked as `.old-<tag>` and the new one copied in, with rollback on failure.

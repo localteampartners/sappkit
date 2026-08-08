@@ -34,6 +34,12 @@
   curated drum-library downloads + installed-kit browser over `~/Samples`).
 - **SappKitUiShot** (`tools/uishot/`) — offscreen editor PNG + `--cctest`
   end-to-end SappLink proof.
+- `src/plugin/UpdateManager.h` — in-plugin updater (background
+  thread): GitHub latest-release check vs JucePlugin_VersionString,
+  platform-asset download, install (SappKit.vst3/.component on
+  macOS + xattr -rc; Windows rename-trick swap), standalone
+  self-relaunch on macOS. `src/core/VersionCompare.h` does the
+  semver-ish tag comparison.
 
 ## Data flow
 
