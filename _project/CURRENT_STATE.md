@@ -6,6 +6,11 @@
 
 ---
 
+- In-plugin updater (v0.3.0): footer version button checks GitHub daily
+  (or on click); UPDATE button downloads + installs the newest release
+  (macOS install + quarantine clear, Windows rename-trick swap).
+  CMake project VERSION must be bumped with every release tag.
+
 ## What's built and working
 
 - Core (`sappkit_core`): KitModel pad mapping (GM-aware, choke/layer/RR
