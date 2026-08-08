@@ -6,6 +6,31 @@ Newest first. Format: `## YYYY-MM-DD — short title`, then bullets.
 
 ---
 
+## 2026-08-08 — v0.4.0
+
+- PERSISTENT KIT MIXES: pad tweaks (tune/decay/pan/level) and the kit bus
+  now save per kit — auto-loaded whenever that kit loads, auto-saved ~2 s
+  after a tweak. Fix the too-loud ride once; it stays fixed. One JSON per
+  kit in the shared Sapp dir (Application Support/Sapp/KitMixes), keyed by
+  note so mixes survive pad-map changes. Host session state still wins on
+  DAW project restore. Loading a kit with no saved mix resets pads to
+  defaults (no more mix bleed between kits).
+- Agent/CLI access: `sappkit mix show|set|clear` edits the same files —
+  `sappkit mix set --sfz kit.sfz ride.level=-6 bus.punch=0.5` (targets by
+  pad name substring, padN, or noteN; name matches apply to all hits, so
+  "ride" tames Ride + Ride Bell). `render` applies the saved mix by
+  default (--no-mix to bypass) — CLI renders sound like the plugin.
+- 8 NEW DRUM LIBRARIES in GET SOUNDS (all free, one click): Muldjord Kit
+  (Tama rock/metal), DRS Kit (Sonor), Naked Drums (multi-mic, 10 RR),
+  Virtuosity Drums (Versilian deep-sampled), Swirly (brushes), Unruly
+  (all-snare experimental), Frankensnare, Gogodze Phu II (lo-fi/hi-fi).
+- ARIA mixer-gate normalization: DrumGizmo-style multi-mic kits (silent
+  out of the box without ARIA's CC sliders) now play a sensible default
+  mix — close mics on, or the full natural mic stack with level trim when
+  channels are indistinguishable. Validated: Muldjord 4256 regions,
+  Virtuosity 1676, Gogodze 777, all rendering.
+- Version 0.4.0 (matches the release tag; updater rule).
+
 ## 2026-08-07 — v0.3.0
 - In-plugin UPDATE button: daily GitHub release check (click the version
   number to check on demand); one click downloads and installs the new

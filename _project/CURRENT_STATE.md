@@ -63,3 +63,13 @@
 ## Half-finished or abandoned
 
 - None.
+
+## Shipped 2026-08-08 — v0.4.0 (persistent mixes + kit expansion)
+
+- Per-kit mix persistence: core/KitMix.{h,cpp} (JSON, note-keyed pads +
+  bus), plugin auto-load/auto-save (suppression covers load/restore churn),
+  CLI `mix show|set|clear` + render mix apply. 34 unit tests green.
+- 12 drum libraries in GET SOUNDS; ARIA mixer-gate normalization in
+  core/KitModel (normalizeAriaMixerGates + loadKitSfz — both the plugin
+  and the CLI load kits through it).
+- Requires sappsounds >= v0.3.3 (ARIA parser fixes).

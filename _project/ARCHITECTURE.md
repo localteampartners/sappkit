@@ -34,6 +34,12 @@
   curated drum-library downloads + installed-kit browser over `~/Samples`).
 - **SappKitUiShot** (`tools/uishot/`) — offscreen editor PNG + `--cctest`
   end-to-end SappLink proof.
+- `src/core/KitMix.{h,cpp}` — persistent per-kit mixes: JSON
+  serialize/parse (framework-free), note-keyed pad entries + bus values,
+  stable mix-file naming (stem + path hash). Shared by plugin, CLI, agents.
+- `src/core/KitModel` also owns `normalizeAriaMixerGates()` +
+  `loadKitSfz()` — the kit-aware load path (parse, un-gate ARIA mixer
+  kits, decode samples) used by the plugin AND the CLI.
 - `src/plugin/UpdateManager.h` — in-plugin updater (background
   thread): GitHub latest-release check vs JucePlugin_VersionString,
   platform-asset download, install (SappKit.vst3/.component on

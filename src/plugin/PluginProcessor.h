@@ -14,6 +14,7 @@
 #include <sapp/sounds/InstrumentLoader.h>
 
 #include "../core/KitEngine.h"
+#include "../core/KitMix.h"
 #include "../core/KitModel.h"
 
 namespace sappkit {
@@ -70,6 +71,12 @@ public:
 
     std::function<void()> onInstrumentChanged;  // editor hook (message thread)
 
+    // Kit-mix persistence: one JSON per kit (see core/KitMix.h) in the shared
+    // Sapp settings dir, read and written by the plugin, the CLI, and agents.
+    // The mix auto-loads with its kit and auto-saves ~2 s after a tweak.
+    static juce::File kitMixDir();
+    juce::File currentKitMixFile() const;
+
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout makeLayout();
     void timerCallback() override;              // debounced pad-override rebuild
@@ -78,6 +85,10 @@ private:
     void finishLoad(sapp::sounds::LoadResult result, const juce::String& path,
                     uint64_t generation);
     void rebuildOverriddenInstrument();
+    void applySavedMixOrDefaults();     // message thread, after a fresh load
+    void setParamValue(const juce::String& paramId, float plainValue);
+    std::array<float, 10> readBusValues() const;
+    void saveMixNow();
 
     juce::AudioProcessorValueTreeState apvts_;
     sapp::kit::KitEngine engine_;
@@ -122,6 +133,15 @@ private:
     sapp::kit::KitModel model_;
     sapp::kit::PadOverrides appliedOverrides_{};
     std::atomic<bool> rebuildInFlight_{false};
+
+    // Mix persistence state (message thread). suppressMixSave_ covers the
+    // param churn a load/restore itself causes; it clears on the first quiet
+    // timer tick, after which only real user tweaks arm the save countdown.
+    bool restorePending_ = false;     // next finishLoad comes from host state
+    bool suppressMixSave_ = true;
+    int mixSaveCountdown_ = -1;       // 8 Hz ticks until save; -1 = idle
+    std::array<float, 10> lastBus_{};
+    bool lastBusValid_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SappKitProcessor)
 };

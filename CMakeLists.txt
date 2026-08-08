@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(SappKit VERSION 0.3.0 LANGUAGES C CXX)
+project(SappKit VERSION 0.4.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -39,6 +39,7 @@ endif()
 # consumed by the plugin, the CLI, and the tests.
 add_library(sappkit_core STATIC
   src/core/KitModel.cpp
+  src/core/KitMix.cpp
   src/core/KitEngine.cpp
   src/core/KitRender.cpp
   src/core/SappLinkCCMap.cpp
@@ -67,6 +68,7 @@ if(SAPPKIT_BUILD_TESTS)
 
   add_executable(SappKitTests
     tests/unit/test_kit_model.cpp
+    tests/unit/test_kit_mix.cpp
     tests/unit/test_kit_engine.cpp
     tests/unit/test_render.cpp
     tests/unit/test_sapplink.cpp

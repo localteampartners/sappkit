@@ -11,9 +11,11 @@
 // consume this.
 
 #include <array>
+#include <filesystem>
 #include <string>
 
 #include <sapp/sounds/InstrumentDefinition.h>
+#include <sapp/sounds/InstrumentLoader.h>
 
 namespace sapp::kit {
 
@@ -52,6 +54,22 @@ const char* gmDrumName(int note);
 // selection keeps the musically essential ones (kick/snare/hats first).
 // Pads are ordered by ascending note.
 KitModel buildKitModel(const sapp::sounds::InstrumentDefinition& def);
+
+// ARIA multi-mic kits (DrumGizmo ports and friends) gate every region on
+// mixer-slider CCs (locc>=1) that a drum plugin never sends, so out of the
+// box the whole kit is silent. Normalize to a sensible default mix: a
+// region whose gate includes a per-drum channel CC (one that gates only a
+// few trigger notes across the kit) is a CLOSE MIC — its unsatisfiable
+// gates are stripped so it plays. Regions gated only by kit-wide CCs
+// (bleed, overheads, room) stay muted — SappKit has its own room. CCs with
+// an explicit set_cc default are host-meaningful and left untouched.
+// Returns the number of regions un-gated; 0 means not an ARIA mixer kit.
+int normalizeAriaMixerGates(sapp::sounds::InstrumentDefinition& def);
+
+// Kit-aware SFZ load: parse, normalize ARIA mixer gates, then decode
+// samples. The plugin and the CLI both load kits through this so a
+// DrumGizmo-style kit sounds the same everywhere.
+sapp::sounds::LoadResult loadKitSfz(const std::filesystem::path& sfzPath);
 
 // Per-pad performance overrides, applied at the region-policy layer.
 struct PadOverride {

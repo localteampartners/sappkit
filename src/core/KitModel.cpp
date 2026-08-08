@@ -2,8 +2,13 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <map>
+#include <set>
 #include <vector>
+
+#include <sapp/sounds/InstrumentLoader.h>
+#include <sapp/sounds/SfzParser.h>
 
 namespace sapp::kit {
 
@@ -122,6 +127,93 @@ std::string cleanSampleName(const std::string& path)
 }
 
 } // namespace
+
+sapp::sounds::LoadResult loadKitSfz(const std::filesystem::path& sfzPath)
+{
+    sapp::sounds::SfzParser parser;
+    auto parsed = parser.parseFile(sfzPath);
+    if (!parsed.ok) {
+        sapp::sounds::LoadResult result;
+        result.diagnostics = std::move(parsed.diagnostics);
+        return result;
+    }
+    normalizeAriaMixerGates(parsed.instrument);
+    sapp::sounds::InstrumentLoader loader;
+    auto result = loader.loadSamples(std::move(parsed.instrument));
+    result.diagnostics.insert(result.diagnostics.begin(),
+                              parsed.diagnostics.begin(), parsed.diagnostics.end());
+    return result;
+}
+
+int normalizeAriaMixerGates(InstrumentDefinition& def)
+{
+    // CCs with an explicit set_cc default are host-meaningful; leave them.
+    std::set<int> defaulted;
+    for (const auto& d : def.controlDefaults) defaulted.insert(d.cc);
+
+    // How many distinct trigger notes each unsatisfiable gate CC covers.
+    // Per-drum channel sliders gate one drum's few notes; bleed/overhead/
+    // room sliders gate most of the kit.
+    std::map<int, std::set<int>> notesPerCc;
+    for (const auto& r : def.regions)
+        for (const auto& c : r.ccConditions)
+            if (c.lo >= 1 && defaulted.count(c.cc) == 0)
+                notesPerCc[c.cc].insert(regionKey(r));
+    if (notesPerCc.empty()) return 0;
+
+    const auto isUnsatisfiable = [&](const sapp::sounds::CcCondition& c) {
+        return c.lo >= 1 && defaulted.count(c.cc) == 0;
+    };
+    const auto stripGates = [&](sapp::sounds::RegionDefinition& r) {
+        auto& conds = r.ccConditions;
+        conds.erase(std::remove_if(conds.begin(), conds.end(), isUnsatisfiable),
+                    conds.end());
+    };
+
+    constexpr size_t kChannelCcMaxNotes = 4;  // hihat channels span 3 notes
+    int ungated = 0;
+    for (auto& r : def.regions) {
+        bool isCloseMic = false;
+        for (const auto& c : r.ccConditions)
+            if (isUnsatisfiable(c) && notesPerCc[c.cc].size() <= kChannelCcMaxNotes) {
+                isCloseMic = true;
+                break;
+            }
+        if (!isCloseMic) continue;
+        stripGates(r);
+        ++ungated;
+    }
+    if (ungated > 0) return ungated;
+
+    // No per-drum channel CCs found — the gates are kit-wide (some ports put
+    // them in <global>, so every region carries every slider CC). The kit
+    // would be silent; play the FULL natural multi-mic mix instead: strip
+    // every unsatisfiable gate and trim each layered region so the summed
+    // mic stack lands near the level of a single-mic kit.
+    // Simultaneous layers per hit = gated regions on one note that would all
+    // fire together for a single mid-velocity stroke (first round robin).
+    std::map<int, int> layersAtV100;
+    for (const auto& r : def.regions)
+        if (std::any_of(r.ccConditions.begin(), r.ccConditions.end(), isUnsatisfiable) &&
+            r.loVel <= 100 && 100 <= r.hiVel && r.seqPosition == 1)
+            ++layersAtV100[regionKey(r)];
+    if (layersAtV100.empty()) return 0;
+    int maxLayers = 1;
+    for (const auto& kv : layersAtV100) maxLayers = std::max(maxLayers, kv.second);
+    // Mic layers of one hit are partly correlated; a full power-sum trim
+    // (10·log10) leaves the kit noticeably quieter than single-mic kits, so
+    // trim half that and let the limiter catch the rest.
+    const float trimDb =
+        -std::clamp(float(5.0 * std::log10(double(maxLayers))), 0.0f, 12.0f);
+    for (auto& r : def.regions) {
+        if (!std::any_of(r.ccConditions.begin(), r.ccConditions.end(), isUnsatisfiable))
+            continue;
+        stripGates(r);
+        r.volumeDb += trimDb;
+        ++ungated;
+    }
+    return ungated;
+}
 
 KitModel buildKitModel(const InstrumentDefinition& def)
 {

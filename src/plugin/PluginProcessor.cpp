@@ -245,11 +245,32 @@ void SappKitProcessor::timerCallback()
         same = a.tuneSemis == b.tuneSemis && a.decay == b.decay &&
                a.pan == b.pan && a.levelDb == b.levelDb;
     }
-    if (same)
+
+    // Kit-bus changes count as mix edits too (no rebuild needed for them).
+    const auto bus = readBusValues();
+    const bool busSame = lastBusValid_ && bus == lastBus_;
+    lastBus_ = bus;
+    lastBusValid_ = true;
+
+    if (same && busSame) {
+        // Quiet tick: the churn from a load/restore has settled; from here on
+        // any parameter movement is the user (or the host) actually mixing.
+        suppressMixSave_ = false;
+        if (mixSaveCountdown_ > 0 && --mixSaveCountdown_ == 0) {
+            mixSaveCountdown_ = -1;
+            saveMixNow();
+        }
         return;
-    rebuildInFlight_ = true;
-    appliedOverrides_ = wanted;
-    rebuildOverriddenInstrument();
+    }
+
+    if (!suppressMixSave_)
+        mixSaveCountdown_ = 16;  // ~2 s after the last touch at 8 Hz
+
+    if (!same) {
+        rebuildInFlight_ = true;
+        appliedOverrides_ = wanted;
+        rebuildOverriddenInstrument();
+    }
 }
 
 void SappKitProcessor::rebuildOverriddenInstrument()
@@ -301,8 +322,7 @@ void SappKitProcessor::loadSfzInstrument(const juce::File& sfzFile)
     }
     const juce::String path = sfzFile.getFullPathName();
     std::thread([this, path, generation] {
-        sapp::sounds::InstrumentLoader loader;
-        auto result = loader.loadSfz(path.toStdString());
+        auto result = sapp::kit::loadKitSfz(path.toStdString());
         juce::MessageManager::callAsync([this, result = std::move(result), path, generation]() mutable {
             finishLoad(std::move(result), path, generation);
         });
@@ -326,16 +346,110 @@ void SappKitProcessor::finishLoad(sapp::sounds::LoadResult result,
     } else {
         baseInstrument_ = result.instrument;
         model_ = buildKitModel(result.instrument->definition);
+        sfzPath_ = path;
+        instrumentName_ = juce::String(result.instrument->definition.name);
+
+        // Fresh load: the kit brings its own saved mix (or clean defaults) so
+        // one kit's pad tweaks never bleed onto another. Host state restores
+        // skip this — the DAW session already carries the mix it saved.
+        const bool fromRestore = restorePending_;
+        restorePending_ = false;
+        suppressMixSave_ = true;
+        mixSaveCountdown_ = -1;
+        lastBusValid_ = false;
+        if (!fromRestore) applySavedMixOrDefaults();
+
         appliedOverrides_ = readPadOverrides();
         engine_.setInstrument(applyPadOverrides(baseInstrument_, model_, appliedOverrides_));
         engine_.collectRetired();
-        sfzPath_ = path;
-        instrumentName_ = juce::String(result.instrument->definition.name);
         loadStatus_ = result.missingSamples.empty()
                           ? juce::String(model_.padCount) + " pads ready"
                           : juce::String(result.missingSamples.size()) + " samples missing";
     }
     if (onInstrumentChanged) onInstrumentChanged();
+}
+
+// ---------------------------------------------------------------- kit mix ---
+
+juce::File SappKitProcessor::kitMixDir()
+{
+    auto base = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory);
+#if JUCE_MAC
+    base = base.getChildFile("Application Support");  // userApplicationDataDirectory = ~/Library
+#endif
+    return base.getChildFile("Sapp").getChildFile("KitMixes");
+}
+
+juce::File SappKitProcessor::currentKitMixFile() const
+{
+    return kitMixDir().getChildFile(
+        juce::String(sapp::kit::kitMixFileName(sfzPath_.toStdString())));
+}
+
+void SappKitProcessor::setParamValue(const juce::String& paramId, float plainValue)
+{
+    if (auto* p = apvts_.getParameter(paramId)) {
+        const float norm = p->convertTo0to1(plainValue);
+        if (p->getValue() != norm) p->setValueNotifyingHost(norm);
+    }
+}
+
+// The kit-bus parameter IDs stored in a mix file, in readBusValues() order.
+static const char* const kBusIds[10] = {
+    "punch", "squash", "crush", "roomLevel", "roomSize",
+    "width", "humanize", "masterGain", "limiter", "quality",
+};
+
+std::array<float, 10> SappKitProcessor::readBusValues() const
+{
+    return {pPunch_->load(), pSquash_->load(), pCrush_->load(),
+            pRoomLevel_->load(), pRoomSize_->load(), pWidth_->load(),
+            pHumanize_->load(), pMaster_->load(), pLimiter_->load(),
+            pQuality_->load()};
+}
+
+void SappKitProcessor::applySavedMixOrDefaults()
+{
+    // Target = defaults, overlaid with the kit's saved mix when one exists.
+    PadOverrides target{};
+    sapp::kit::KitMix mix;
+    bool haveMix = false;
+    const auto file = currentKitMixFile();
+    if (file.existsAsFile() &&
+        sapp::kit::parseKitMix(file.loadFileAsString().toStdString(), mix)) {
+        sapp::kit::applyMixToOverrides(mix, model_, target);
+        haveMix = true;
+    }
+
+    for (int pad = 0; pad < kNumPads; ++pad) {
+        const auto& t = target[size_t(pad)];
+        const int n = pad + 1;
+        setParamValue(padParamId(n, "Tune"), t.tuneSemis);
+        setParamValue(padParamId(n, "Decay"), t.decay);
+        setParamValue(padParamId(n, "Pan"), t.pan);
+        setParamValue(padParamId(n, "Level"), t.levelDb);
+    }
+    if (haveMix)
+        for (const auto& id : kBusIds)
+            if (const double* v = mix.busValue(id))
+                setParamValue(id, float(*v));
+}
+
+void SappKitProcessor::saveMixNow()
+{
+    auto mix = sapp::kit::captureMix(sfzPath_.toStdString(),
+                                     instrumentName_.toStdString(),
+                                     model_, appliedOverrides_);
+    const auto bus = readBusValues();
+    for (size_t i = 0; i < bus.size(); ++i)
+        mix.setBus(kBusIds[i], bus[i]);
+
+    const auto file = currentKitMixFile();
+    file.getParentDirectory().createDirectory();
+    if (file.replaceWithText(juce::String(sapp::kit::serializeKitMix(mix)))) {
+        const juce::ScopedLock sl(loadLock_);
+        loadStatus_ = "mix saved";
+    }
 }
 
 juce::String SappKitProcessor::currentInstrumentName() const
@@ -374,6 +488,7 @@ void SappKitProcessor::setStateInformation(const void* data, int sizeInBytes)
         if (!state.isValid()) return;
         apvts_.replaceState(state);
         const juce::String path = state.getProperty("sfzPath", "").toString();
+        restorePending_ = true;  // host state carries the mix; skip the file
         if (path.isNotEmpty() && juce::File(path).existsAsFile())
             loadSfzInstrument(juce::File(path));
         else
