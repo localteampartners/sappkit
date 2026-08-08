@@ -18,6 +18,7 @@ const std::vector<FactoryKit>& all()
         { "Virtuosity Full Kit",  "virtuosity-drums", "02-full-kit"          },
         { "Gogodze Lo-Fi Kit",    "gogodze-phu",      "Kit."                 },
         { "Gogodze Lo-Fi Kit B",  "gogodze-phu",      "Kit_b"                },
+        { "Latin Percussion",     "latin-percussion", "Latin-Percussion"     },
     };
     return table;
 }

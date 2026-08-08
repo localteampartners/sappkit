@@ -54,6 +54,10 @@ const std::vector<LibraryDef>& soundsRegistry()
          {"https://codeload.github.com/sfzinstruments/karoryfer.frankensnare/zip/refs/heads/main"}},
         {"gogodze-phu", "Gogodze Phu II (lo-fi to hi-fi)", "135 MB", "CC0 public domain", "zip",
          {"https://codeload.github.com/sfzinstruments/karoryfer.gogodze-phu-vol-ii/zip/refs/heads/master"}},
+        {"latin-percussion", "Latin Percussion (bongos, congas, bossa)", "6 MB",
+         "CC0 public domain", "zip",
+         {"https://github.com/localteampartners/sappkit/releases/download/samples-v1/"
+          "SappKit-Latin-Percussion.zip"}},
         {"vsco2-ce", "VSCO 2 CE (orchestral percussion)", "3.3 GB", "CC0 public domain", "zip",
          {"https://codeload.github.com/sgossner/VSCO-2-CE/zip/refs/heads/master"}},
     };

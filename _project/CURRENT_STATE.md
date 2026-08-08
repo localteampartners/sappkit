@@ -73,3 +73,11 @@
   core/KitModel (normalizeAriaMixerGates + loadKitSfz — both the plugin
   and the CLI load kits through it).
 - Requires sappsounds >= v0.3.3 (ARIA parser fixes).
+
+## 2026-08-08 — Latin percussion + grooves
+
+- 13 libraries in GET SOUNDS; "latin-percussion" is hosted by us as a
+  release asset (tag `samples-v1`) because it is a generated SFZ mapping
+  over CC0 VCSL samples, not an upstream package.
+- `scripts/make_grooves.py` regenerates `demo/grooves/*.mid` (GM map,
+  deterministic humanisation).

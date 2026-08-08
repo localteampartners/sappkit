@@ -6,6 +6,24 @@ Newest first. Format: `## YYYY-MM-DD — short title`, then bullets.
 
 ---
 
+## 2026-08-08 (later)
+
+- **Latin percussion kit + Latin grooves.** New one-click library in GET
+  SOUNDS: "Latin Percussion" (6 MB) — bongos, congas (mute/open/low), cajon
+  (bass tones + slap), claves, cowbells, agogo, cabasa, shaker, guiro,
+  tambourine. 99 samples / 23 mapped voices on the GM percussion map, with
+  velocity layers, round robins, and choke groups (mute vs open conga,
+  short vs long guiro, bongos, cowbell). Samples from the Versilian
+  Community Sample Library (CC0); the SFZ mapping and per-voice level
+  calibration were generated for SappKit and are hosted on the repo's
+  `samples-v1` release.
+- Also selectable as a factory program ("Latin Percussion"), so sapptune
+  can reach it by MIDI program change.
+- **10 groove MIDI files** in `demo/grooves/` from `scripts/make_grooves.py`:
+  bossa nova (3 feels), samba, son montuno, guaguanco, cha-cha, songo,
+  baiao, mambo. Written to the GM map so they play on the Latin kit or any
+  GM drum kit; humanisation is seeded, so renders are reproducible.
+
 ## 2026-08-08 — v0.4.0
 
 - PERSISTENT KIT MIXES: pad tweaks (tune/decay/pan/level) and the kit bus
