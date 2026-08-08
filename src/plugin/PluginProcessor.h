@@ -40,11 +40,19 @@ public:
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 4.0; }
 
-    int getNumPrograms() override { return 1; }
-    int getCurrentProgram() override { return 0; }
-    void setCurrentProgram(int) override {}
-    const juce::String getProgramName(int) override { return "Default"; }
+    // Factory kit programs (see FactoryKits.h): program N loads kit N via
+    // the same path the sounds browser uses (loadKitSfz + saved kit mixes).
+    // Reachable from the host program API and via MIDI program change
+    // (SappLink set_patches). Programs whose library is not installed are a
+    // no-op with a status message. CCs keep working on top.
+    int getNumPrograms() override;
+    int getCurrentProgram() override { return currentProgram_.load(); }
+    void setCurrentProgram(int index) override;
+    const juce::String getProgramName(int index) override;
     void changeProgramName(int, const juce::String&) override {}
+
+    // Load factory kit program N now. Message thread only.
+    void applyKitProgram(int index);
 
     void getStateInformation(juce::MemoryBlock& destData) override;
     void setStateInformation(const void* data, int sizeInBytes) override;
@@ -120,6 +128,11 @@ private:
     void advanceCcSlews(int numSamples);
 
     std::vector<sapp::sounds::MidiEvent> eventScratch_;
+
+    // MIDI program change lands on the audio thread; the kit load itself is
+    // triggered from the timer (message thread), sappstep-style.
+    std::atomic<int> pendingProgram_{-1};
+    std::atomic<int> currentProgram_{0};
 
     // Instrument state (message thread + load thread under loadLock_).
     juce::String sfzPath_;                 // "" = diagnostic kit

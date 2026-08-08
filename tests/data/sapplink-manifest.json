@@ -17,6 +17,17 @@
     { "id": "roomLevel",  "label": "Room",       "cc": 91,  "range": [0, 1],    "curve": "linear", "tags": ["space", "reverb", "room"] },
     { "id": "roomSize",   "label": "Room Size",  "cc": 92,  "range": [0, 1],    "curve": "linear", "tags": ["space", "room"] }
   ],
-  "presets": [],
+  "presets": [
+    { "name": "Diagnostic Kit", "program": 0 },
+    { "name": "Black Pearl 4pc", "program": 1 },
+    { "name": "Black Pearl 5pc", "program": 2 },
+    { "name": "Red Zeppelin 4pc", "program": 3 },
+    { "name": "Red Zeppelin 5pc", "program": 4 },
+    { "name": "Muldjord Kit", "program": 5 },
+    { "name": "Virtuosity Basic Kit", "program": 6 },
+    { "name": "Virtuosity Full Kit", "program": 7 },
+    { "name": "Gogodze Lo-Fi Kit", "program": 8 },
+    { "name": "Gogodze Lo-Fi Kit B", "program": 9 }
+  ],
   "articulations": []
 }

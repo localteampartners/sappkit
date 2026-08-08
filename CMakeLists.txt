@@ -111,6 +111,7 @@ if(SAPPKIT_BUILD_PLUGIN)
   target_sources(SappKitPlugin PRIVATE
     src/plugin/PluginProcessor.cpp
     src/plugin/PluginEditor.cpp
+    src/plugin/FactoryKits.cpp
     src/plugin/SoundsPanel.cpp
   )
   target_link_libraries(SappKitPlugin PRIVATE
@@ -135,6 +136,7 @@ if(SAPPKIT_BUILD_PLUGIN)
       tools/uishot/main.cpp
       src/plugin/PluginProcessor.cpp
       src/plugin/PluginEditor.cpp
+      src/plugin/FactoryKits.cpp
       src/plugin/SoundsPanel.cpp
     )
     target_include_directories(SappKitUiShot PRIVATE src/plugin)

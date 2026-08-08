@@ -2,7 +2,9 @@
 
 #include "../core/DiagnosticKit.h"
 #include "../core/SappLinkCCMap.h"
+#include "FactoryKits.h"
 #include "PluginEditor.h"
+#include "SoundsPanel.h"
 
 namespace sappkit {
 
@@ -94,6 +96,57 @@ SappKitProcessor::SappKitProcessor()
 }
 
 SappKitProcessor::~SappKitProcessor() { stopTimer(); }
+
+// -------------------------------------------------------- factory programs --
+
+int SappKitProcessor::getNumPrograms()
+{
+    return int(factorykits::all().size());
+}
+
+const juce::String SappKitProcessor::getProgramName(int index)
+{
+    const auto& table = factorykits::all();
+    if (index < 0 || index >= int(table.size()))
+        return {};
+    return table[size_t(index)].name;
+}
+
+void SappKitProcessor::setCurrentProgram(int index)
+{
+    // Hosts may call this from any thread; defer to the timer like a MIDI
+    // program change. currentProgram_ updates immediately so hosts that read
+    // it straight back see the new value.
+    if (index < 0 || index >= getNumPrograms() || index == currentProgram_.load())
+        return;
+    currentProgram_.store(index);
+    pendingProgram_.store(index);
+}
+
+void SappKitProcessor::applyKitProgram(int index)
+{
+    const auto& table = factorykits::all();
+    if (index < 0 || index >= int(table.size()))
+        return;
+
+    if (index == 0) {
+        currentProgram_.store(0);
+        loadDiagnosticKit();
+        updateHostDisplay(ChangeDetails{}.withProgramChanged(true));
+        return;
+    }
+
+    const auto sfz = factorykits::resolveKit(index, SoundsPanel::samplesRoot());
+    if (!sfz.existsAsFile()) {
+        const juce::ScopedLock sl(loadLock_);
+        loadStatus_ = juce::String(table[size_t(index)].name) + " not installed";
+        return;
+    }
+    currentProgram_.store(index);
+    if (sfz.getFullPathName() != sfzPath_)
+        loadSfzInstrument(sfz);
+    updateHostDisplay(ChangeDetails{}.withProgramChanged(true));
+}
 
 // ----------------------------------------------------------- SappLink CC-in --
 
@@ -197,6 +250,11 @@ void SappKitProcessor::processBlock(juce::AudioBuffer<float>& buffer,
             e.type = MidiEvent::Type::AllNotesOff;
         } else if (msg.isAllSoundOff()) {
             e.type = MidiEvent::Type::AllSoundOff;
+        } else if (msg.isProgramChange()) {
+            // Factory kit select; the load runs from the timer (message
+            // thread) — never from the audio thread.
+            pendingProgram_.store(msg.getProgramChangeNumber());
+            continue;
         } else {
             continue;
         }
@@ -231,6 +289,11 @@ PadOverrides SappKitProcessor::readPadOverrides() const
 
 void SappKitProcessor::timerCallback()
 {
+    // Deferred kit load from a MIDI program change.
+    const int program = pendingProgram_.exchange(-1);
+    if (program >= 0)
+        applyKitProgram(program);
+
     // Debounce: pad knob turns change APVTS params; every tick we compare to
     // the overrides last baked into the playing instrument and rebuild off
     // the message thread when they differ. Region rebuild + sample copy is
@@ -365,6 +428,13 @@ void SappKitProcessor::finishLoad(sapp::sounds::LoadResult result,
         loadStatus_ = result.missingSamples.empty()
                           ? juce::String(model_.padCount) + " pads ready"
                           : juce::String(result.missingSamples.size()) + " samples missing";
+
+        // Keep getCurrentProgram honest for kits reached via the sounds
+        // browser or host state restore, not just via program change.
+        const int program =
+            factorykits::programForKitFile(sfzPath_, SoundsPanel::samplesRoot());
+        if (program >= 0)
+            currentProgram_.store(program);
     }
     if (onInstrumentChanged) onInstrumentChanged();
 }
