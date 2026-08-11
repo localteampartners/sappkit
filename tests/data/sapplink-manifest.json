@@ -8,12 +8,13 @@
     "pitchBendRangeSemitones": 2
   },
   "parameters": [
+    { "id": "clean",      "label": "Clean",      "cc": 3,   "range": [0, 1],    "curve": "linear", "tags": ["clean", "imperfection"] },
     { "id": "masterGain", "label": "Master",     "cc": 7,   "range": [-24, 12], "curve": "linear", "tags": ["volume"] },
     { "id": "punch",      "label": "Punch",      "cc": 14,  "range": [0, 1],    "curve": "linear", "tags": ["transient", "attack", "punch"] },
     { "id": "squash",     "label": "Squash",     "cc": 15,  "range": [0, 1],    "curve": "linear", "tags": ["compression", "glue", "pump"] },
     { "id": "crush",      "label": "Crush",      "cc": 16,  "range": [0, 1],    "curve": "linear", "tags": ["lofi", "vintage", "character"] },
     { "id": "width",      "label": "Width",      "cc": 17,  "range": [0, 2],    "curve": "linear", "tags": ["width", "space"] },
-    { "id": "humanize",   "label": "Humanize",   "cc": 18,  "range": [0, 1],    "curve": "linear", "tags": ["humanize", "feel"] },
+    { "id": "humanize",   "label": "Humanize",   "cc": 18,  "range": [0, 1],    "curve": "linear", "tags": ["humanize", "feel", "imperfection"] },
     { "id": "roomLevel",  "label": "Room",       "cc": 91,  "range": [0, 1],    "curve": "linear", "tags": ["space", "reverb", "room"] },
     { "id": "roomSize",   "label": "Room Size",  "cc": 92,  "range": [0, 1],    "curve": "linear", "tags": ["space", "room"] }
   ],
@@ -27,7 +28,8 @@
     { "name": "Virtuosity Basic Kit", "program": 6 },
     { "name": "Virtuosity Full Kit", "program": 7 },
     { "name": "Gogodze Lo-Fi Kit", "program": 8 },
-    { "name": "Gogodze Lo-Fi Kit B", "program": 9 }
+    { "name": "Gogodze Lo-Fi Kit B", "program": 9 },
+    { "name": "Latin Percussion", "program": 10 }
   ],
   "articulations": []
 }

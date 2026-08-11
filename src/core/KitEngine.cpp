@@ -70,10 +70,13 @@ void KitEngine::applyEngineHooks(const KitParams& p) noexcept
         sampler_.setInterpolationQuality(p.quality == 0 ? 0 : 1);
     }
     // Humanize: subtle per-hit tune scatter on top of whatever lorand/hirand
-    // and *_random opcodes the library itself ships.
-    if (p.humanize != lastHumanize_) {
-        lastHumanize_ = p.humanize;
-        sampler_.setRandomTuneCents(p.humanize * 10.0f);
+    // and *_random opcodes the library itself ships. `clean` (SappLink CC 3)
+    // is the suite-wide imperfection scaler: clean=1 removes the scatter
+    // entirely, clean=0 leaves it exactly as designed.
+    const float humanize = p.humanize * (1.0f - std::clamp(p.clean, 0.0f, 1.0f));
+    if (humanize != lastHumanize_) {
+        lastHumanize_ = humanize;
+        sampler_.setRandomTuneCents(humanize * 10.0f);
     }
     if (p.roomSize != lastRoomSize_) {
         lastRoomSize_ = p.roomSize;

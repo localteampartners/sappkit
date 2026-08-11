@@ -1,0 +1,7 @@
+// Headless-regression fixture (sappkit #1): deliberately much quieter than
+// the loud kit, so "which kit actually sounded?" is answerable from the audio
+// alone. Shaped like gogodze-phu so factory program 8 resolves against it.
+<region> sample=../drum-hit.wav key=36 pitch_keycenter=36 volume=-20
+<region> sample=../drum-hit.wav key=38 pitch_keycenter=36 volume=-22 transpose=7
+<region> sample=../drum-hit.wav key=42 pitch_keycenter=36 volume=-26 transpose=24 group=1 off_by=1
+<region> sample=../drum-hit.wav key=46 pitch_keycenter=36 volume=-26 transpose=22 group=1 off_by=1

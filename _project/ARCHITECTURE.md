@@ -23,17 +23,37 @@
     humanize/quality hooks into the sampler.
   - `KitFx.h` — TransientShaper, BusCompressor, Crusher, SmallRoom DSP.
   - `KitRender` — deterministic offline render, SappLink CC steering.
-  - `SappLinkCCMap` — the CC↔parameter contract (8 kit-bus params).
+  - `SappLinkCCMap` — the CC↔parameter contract (9 kit-bus params,
+    including `clean` on CC 3).
   - `DiagnosticKit` — generated in-memory GM kit (chokes, RRs, vel layers)
     for tests/CLI/plugin default.
 - **sappkit-cli** (`src/cli/`) — agent JSON API: pads / inspect / validate /
   params / scan / render.
-- **SappKitPlugin** (`src/plugin/`) — JUCE processor (APVTS, async SFZ load,
-  debounced pad-override rebuild, SappLink CC slew) + editor (4×4 pad grid,
+- **SappKitPlugin** (`src/plugin/`) — JUCE processor (APVTS, loader-thread
+  SFZ load, debounced pad-override rebuild, SappLink CC slew) + editor (4×4 pad grid,
   pad edit strip, kit knobs, meters) + GET SOUNDS overlay (`SoundsPanel`:
   curated drum-library downloads + installed-kit browser over `~/Samples`).
 - **SappKitUiShot** (`tools/uishot/`) — offscreen editor PNG + `--cctest`
   end-to-end SappLink proof.
+- **SappKitHeadless** (`tools/headless/`) — the station harness: drives the
+  real processor with no editor and with the JUCE dispatch loop NEVER run.
+  `selftest` is the CTest `headless` regression for issue #1.
+
+## Threading
+
+Three threads touch the processor, and the split is load-bearing (issue #1):
+
+- **audio thread** — `processBlock`: MIDI conversion, CC slew, engine render.
+  Stores pending program / preset indices; never loads anything.
+- **loader thread** — the ONE place an instrument is installed. Owns the
+  `LoadJob` queue, applies pending program/preset selections, and runs the
+  8 Hz pad-override rebuild + mix-save tick. Joined in the destructor.
+- **message thread** — editor only. The `juce::Timer` fires the
+  `onInstrumentChanged` hook and flushes `updateHostDisplay`. A host with no
+  message loop loses the editor niceties and nothing else.
+
+`libraryReady` (outside the APVTS) reports readiness for hosts that would
+otherwise guess a settle window.
 - `src/core/KitMix.{h,cpp}` — persistent per-kit mixes: JSON
   serialize/parse (framework-free), note-keyed pad entries + bus values,
   stable mix-file naming (stem + path hash). Shared by plugin, CLI, agents.

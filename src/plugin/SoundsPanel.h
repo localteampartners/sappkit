@@ -26,6 +26,12 @@ struct LibraryDef {
 
 const std::vector<LibraryDef>& soundsRegistry();
 
+// Overrides the shared samples root when it names an existing directory. The
+// headless regression points it at a fixture kit tree so the factory kit
+// programs resolve without a real sample library installed; nothing in the
+// product sets it.
+inline constexpr const char* kSamplesRootEnvVar = "SAPP_SAMPLES_ROOT";
+
 class SoundsPanel : public juce::Component, private juce::Timer
 {
 public:

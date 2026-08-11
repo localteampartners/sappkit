@@ -277,6 +277,15 @@ SoundsPanel::~SoundsPanel() { job_.reset(); }
 
 juce::File SoundsPanel::samplesRoot()
 {
+    // $SAPP_SAMPLES_ROOT wins over the stored setting: the headless
+    // regression (issue #1) points it at a fixture so factory kit programs
+    // resolve without a real sample library installed — and without writing
+    // to the user's shared Sapp settings file.
+    if (const char* env = std::getenv(kSamplesRootEnvVar)) {
+        const juce::File override(juce::String::fromUTF8(env));
+        if (override.isDirectory())
+            return override;
+    }
     const auto fallback = juce::File::getSpecialLocation(juce::File::userHomeDirectory)
                               .getChildFile("Samples");
     const auto stored = sappSettings().getValue("samplesRoot", fallback.getFullPathName());

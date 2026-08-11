@@ -78,6 +78,8 @@ const ParamSpec kParams[] = {
      "Per-hit random tune scatter on top of the library's own round robins and *_random opcodes."},
     {"master_gain_db", "masterGain", &KitParams::masterGainDb, -24.0f, 12.0f, 0.0f,
      "Master output gain in dB."},
+    {"clean", "clean", &KitParams::clean, 0.0f, 1.0f, 0.0f,
+     "Suite-wide imperfection scaler (SappLink CC 3): 0 = every modeled imperfection as designed, 1 = none. Scales humanize by (1 - clean)."},
 };
 
 // Pad override params: pad<1-16>_tune/_decay/_pan/_level, 1-based pad index.
@@ -593,7 +595,7 @@ int cmdMix(int argc, char** argv)
                      "  TARGET: pad<1-16> | note<N> | pad-name substring (ride, crash, snare...)\n"
                      "  PARAM:  tune (-12..12) | decay (0..1) | pan (-1..1) | level (dB, -24..12)\n"
                      "  bus:    bus.<param>=VALUE (punch, squash, crush, roomLevel, roomSize,\n"
-                     "          width, humanize, masterGain, limiter, quality)\n");
+                     "          width, humanize, clean, masterGain, limiter, quality)\n");
         return 2;
     }
 

@@ -2,7 +2,7 @@
 
 <!-- UPDATE WHEN: a feature ships, a deploy happens, something breaks, or something gets fixed. This file answers "what's the project like *right now*?" -->
 
-**Last verified:** 2026-08-06
+**Last verified:** 2026-08-10
 
 ---
 
@@ -58,7 +58,7 @@
 
 - **Environment:** local only (macOS). Plugin copied to user plugin dirs by
   the JUCE copy step on build.
-- **Version / commit:** v0.1.0 initial.
+- **Version / commit:** v0.7.0 (CMake `project(... VERSION ...)` is the single source; the CI release guard reads only that).
 
 ## What's in progress
 
@@ -66,8 +66,14 @@
 
 ## What's known broken / flaky
 
-- None known. (SM Drums / Big Rusty registry entries are registered but not
-  yet load-tested through the pad mapper — AVL and the diagnostic kit are.)
+- (SM Drums / Big Rusty registry entries are registered but not yet
+  load-tested through the pad mapper — AVL and the diagnostic kit are.)
+- Cosmetic: `sapp::userpresets::capture()` snapshots every parameter with an
+  id, so a saved user preset JSON now also carries a `libraryReady` entry.
+  Inert on load (the id is not in the APVTS, so `apply()` skips it) and it
+  can never reach host state. Not fixed here because `UserPresets.{h,cpp}`
+  is byte-identical across sappsynth / sappkeys / sappkit — the right fix
+  (skip non-automatable parameters) belongs in all three at once.
 
 ## Half-finished or abandoned
 
@@ -90,3 +96,23 @@
   over CC0 VCSL samples, not an upstream package.
 - `scripts/make_grooves.py` regenerates `demo/grooves/*.mid` (GM map,
   deterministic humanisation).
+
+## Shipped 2026-08-10 — v0.7.0 (headless kit loading, issue #1)
+
+- Kit loading no longer depends on the JUCE message loop. A **loader
+  thread** owns a LoadJob queue and performs every install; it also runs the
+  8 Hz pad-override / mix-save tick. `juce::Timer` is an editor hook only,
+  and the thread is joined in the destructor (closing a latent
+  use-after-free in the old detached-thread + callAsync design).
+  Headless before: -200.00 dBFS / 0 voices / 0 pads. After: -27.92 dBFS /
+  2 voices / 4 pads, byte-identical with and without a pumped loop.
+- `libraryReady` read-only host parameter (outside the APVTS, appended
+  last): the station polls it instead of a blind settle. Via the VST3
+  controller its value lands through `outputParameterChanges`, so one
+  `processBlock` must run first.
+- `SappKit-build:` / `SappKit-kit:` / `SappKit-audio-source:` log lines
+  (tee with `$SAPP_KIT_LOG`).
+- `clean` parameter (SappLink CC 3, default 0) scaling `humanize` by
+  (1 − clean), in the plugin, the CLI and the offline render.
+- `tools/headless/sappkit-headless` + CTest `headless` (19 checks);
+  `verify.sh` now builds the plugin target too. 35 unit test cases.

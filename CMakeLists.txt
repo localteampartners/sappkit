@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(SappKit VERSION 0.6.2 LANGUAGES C CXX)
+project(SappKit VERSION 0.7.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -47,6 +47,9 @@ add_library(sappkit_core STATIC
 )
 target_include_directories(sappkit_core PUBLIC src)
 target_link_libraries(sappkit_core PUBLIC Sapp::Sounds)
+# The build identity every SappKit-* log line carries. The CI release guard
+# reads project(... VERSION ...) above and nothing else.
+target_compile_definitions(sappkit_core PUBLIC SAPPKIT_VERSION="${PROJECT_VERSION}")
 sappkit_set_warnings(sappkit_core)
 
 # -------------------------------------------------------------------- cli ---
@@ -129,6 +132,39 @@ if(SAPPKIT_BUILD_PLUGIN)
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0
   )
+
+  # ------------------------------------------------------ headless harness ---
+  # The station host: no editor, no dispatch loop. Cross-platform on purpose —
+  # sappkit #1 only reproduces where the JUCE message loop never runs, so this
+  # is the target that guards it (and CTest runs its selftest).
+  juce_add_console_app(SappKitHeadless PRODUCT_NAME "sappkit-headless")
+  target_sources(SappKitHeadless PRIVATE
+    tools/headless/main.cpp
+    src/plugin/PluginProcessor.cpp
+    src/plugin/PluginEditor.cpp
+    src/plugin/FactoryKits.cpp
+    src/plugin/SoundsPanel.cpp
+    src/plugin/UserPresets.cpp
+  )
+  target_include_directories(SappKitHeadless PRIVATE src/plugin)
+  target_link_libraries(SappKitHeadless PRIVATE
+    sappkit_core
+    juce::juce_audio_utils
+    juce::juce_dsp
+    juce::juce_recommended_config_flags
+  )
+  target_compile_definitions(SappKitHeadless PRIVATE
+    JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_MODAL_LOOPS_PERMITTED=1
+    SAPPKIT_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
+  set_target_properties(SappKitHeadless PROPERTIES OUTPUT_NAME sappkit-headless)
+
+  if(SAPPKIT_BUILD_TESTS)
+    # The regression that guards issue #1. It runs the PLUGIN processor, so it
+    # only exists when the plugin target is built — which is the point
+    # (sappkeys #1: tests green while the installed binary stayed stale).
+    enable_testing()
+    add_test(NAME headless COMMAND SappKitHeadless selftest)
+  endif()
 
   if(APPLE)
     # Offscreen editor snapshot tool (UI verification without screen capture).

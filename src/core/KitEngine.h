@@ -32,6 +32,11 @@ struct KitParams {
     float width = 1.0f;        // 0 mono .. 2 wide
     // Feel
     float humanize = 0.15f;    // 0..1 → per-hit random tune breadth
+    // Suite-wide `clean` convention (SappLink CC 3): 0 = every modeled
+    // imperfection as designed, 1 = none. Scales every imperfection source
+    // this engine has — that is `humanize`, the per-hit tune scatter — by
+    // (1 - clean). Never silences anything.
+    float clean = 0.0f;        // 0..1
     // Output
     float masterGainDb = 0.0f; // -24..+12
     bool limiter = true;

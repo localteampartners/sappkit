@@ -15,6 +15,20 @@ namespace {
 const char* kPadSuffixes[4] = {"Tune", "Decay", "Pan", "Level"};
 }
 
+void logLine(const juce::String& message)
+{
+    juce::Logger::writeToLog(message);
+#if JUCE_WINDOWS
+    // JUCE's fallback logger is OutputDebugString on Windows — invisible to a
+    // station box redirecting the host's output. stderr is what it greps.
+    std::fputs((message + "\n").toRawUTF8(), stderr);
+    std::fflush(stderr);
+#endif
+    if (const char* path = std::getenv(kLogEnvVar))
+        if (path[0] != 0)
+            juce::File(juce::String::fromUTF8(path)).appendText(message + "\n");
+}
+
 juce::String SappKitProcessor::padParamId(int padNumber, const char* suffix)
 {
     return "pad" + juce::String(padNumber) + suffix;
@@ -75,6 +89,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout SappKitProcessor::makeLayout
     layout.add(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID{sapp::userpresets::kPresetParamId, 1}, "Preset", presetChoices, 0));
 
+    // Suite-wide `clean` convention (CC 3, sapptune's sappkit manifest):
+    // 0 = every modeled imperfection as designed, 1 = none. Here that scales
+    // `humanize` — SappKit's per-hit tune scatter — by (1 − clean). Appended
+    // AFTER `preset` so no pre-existing automation index moves. Default 0
+    // keeps the historical sound, and — issue #1's postmortem rule — no
+    // parameter of this plugin may default to a value that silences it.
+    layout.add(std::make_unique<P>(juce::ParameterID{"clean", 1}, "Clean",
+                                   Range{0.0f, 1.0f, 0.001f}, 0.0f));
+
     return layout;
 }
 
@@ -94,6 +117,7 @@ SappKitProcessor::SappKitProcessor()
     pMaster_ = raw("masterGain");
     pLimiter_ = raw("limiter");
     pQuality_ = raw("quality");
+    pClean_ = raw("clean");
     for (int pad = 0; pad < kNumPads; ++pad)
         for (int p = 0; p < 4; ++p)
             padParams_[size_t(pad)][size_t(p)] = raw(padParamId(pad + 1, kPadSuffixes[p]));
@@ -106,18 +130,52 @@ SappKitProcessor::SappKitProcessor()
     for (size_t i = 0; i < table.size(); ++i)
         ccSlews_[i].parameter = apvts_.getParameter(table[i].paramId);
 
+    // Readiness readout (issue #1): a headless host polls this instead of
+    // guessing a settle window. Outside the APVTS on purpose — see the
+    // declaration. Appended last, after every APVTS parameter.
+    // withMeta: the PLUGIN owns this value, not the host. auval's
+    // "parameter values across initialization" check compares what it wrote
+    // with what it reads back, and a readout the plugin keeps rewriting fails
+    // that check unless it is declared meta (AU kIsGlobalMeta).
+    libraryReady_ = new juce::AudioParameterBool(
+        juce::ParameterID{"libraryReady", 1}, "Library Ready", false,
+        juce::AudioParameterBoolAttributes().withAutomatable(false).withMeta(true));
+    addParameter(libraryReady_);
+
     // Host-automatable sound selection (sapptune issue #13). The callback can
-    // arrive on the audio thread; it only stores an index.
+    // arrive on the audio thread; it only stores an index, and the LOADER
+    // THREAD applies it.
     apvts_.addParameterListener(sapp::userpresets::kPresetParamId, this);
 
+    // The loader thread owns every kit install. Started before the
+    // construction diagnostic is queued so nothing waits on the host.
+    loaderThread_ = std::thread([this] { loaderLoop(); });
+
+    // The 8 Hz timer is an EDITOR convenience only. Nothing about loading or
+    // the pad-override rebuild depends on it any more — see the threading
+    // note in the header.
+    startTimerHz(8);
+
+    // Which build did the host just load, and what can it enumerate? One line
+    // at construction turns "the wrong sound came out" into a log grep.
+    logLine("SappKit-build: version=" SAPPKIT_VERSION
+            " root=\"" + SoundsPanel::samplesRoot().getFullPathName()
+            + "\" programs=" + juce::String(int(factorykits::all().size())));
+
     loadDiagnosticKit();
-    startTimerHz(8);   // debounced pad-override rebuild
 }
 
 SappKitProcessor::~SappKitProcessor()
 {
     stopTimer();
     apvts_.removeParameterListener(sapp::userpresets::kPresetParamId, this);
+    // Join the loader thread before anything it touches goes away. The old
+    // detached-thread + callAsync design left closures capturing `this` alive
+    // past destruction — a crash waiting for the next pump.
+    loaderStop_.store(true, std::memory_order_release);
+    queueCv_.notify_all();
+    if (loaderThread_.joinable())
+        loaderThread_.join();
 }
 
 // -------------------------------------------------------- factory programs --
@@ -144,6 +202,9 @@ void SappKitProcessor::setCurrentProgram(int index)
         return;
     currentProgram_.store(index);
     pendingProgram_.store(index);
+    if (libraryReady_ != nullptr && libraryReady_->get())
+        *libraryReady_ = false;
+    queueCv_.notify_all();
 }
 
 void SappKitProcessor::applyKitProgram(int index)
@@ -156,18 +217,24 @@ void SappKitProcessor::applyKitProgram(int index)
         currentProgram_.store(0);
         loadDiagnosticKit();
         syncPresetParameter(0);
-        updateHostDisplay(ChangeDetails{}.withProgramChanged(true));
+        hostDisplayDirty_.store(true);
         return;
     }
 
     const auto sfz = factorykits::resolveKit(index, SoundsPanel::samplesRoot());
     if (!sfz.existsAsFile()) {
-        const juce::ScopedLock sl(loadLock_);
-        loadStatus_ = juce::String(table[size_t(index)].name) + " not installed";
+        {
+            const juce::ScopedLock sl(loadLock_);
+            loadStatus_ = juce::String(table[size_t(index)].name) + " not installed";
+        }
+        // Say so. A silent no-op here is exactly how this class of bug hides.
+        logLine("SappKit-kit: MISSING program=" + juce::String(index) + " name=\""
+                + juce::String(table[size_t(index)].name) + "\" build=" SAPPKIT_VERSION);
+        instrumentChangedFlag_.store(true);
         return;
     }
     currentProgram_.store(index);
-    if (sfz.getFullPathName() != sfzPath_)
+    if (sfz.getFullPathName() != currentInstrumentPath())
         loadSfzInstrument(sfz);
     // Keep the `preset` chooser following the kit however the kit was picked
     // (MIDI program change, host program API, the chooser itself). Loading a
@@ -175,7 +242,7 @@ void SappKitProcessor::applyKitProgram(int index)
     // touches only the 10 kit-bus ids and the pad ids — so unlike sappsynth
     // there is no "reset everything" loop that could clobber the chooser.
     syncPresetParameter(index);
-    updateHostDisplay(ChangeDetails{}.withProgramChanged(true));
+    hostDisplayDirty_.store(true);
 }
 
 // ------------------------------------------------------------ user presets --
@@ -232,19 +299,14 @@ bool SappKitProcessor::loadUserPreset(const juce::String& name, juce::String& er
 
     juce::String note;
     if (preset->sfz.isNotEmpty()) {
-        juce::String current;
-        {
-            const juce::ScopedLock sl(loadLock_);
-            current = sfzPath_;
-        }
+        const juce::String current = currentInstrumentPath();
         const juce::File kit(preset->sfz);
         if (kit.existsAsFile()) {
             if (kit.getFullPathName() != current) {
                 // The preset carries the whole mix, so the incoming kit must
                 // NOT overwrite it from its own saved-mix file — exactly the
                 // deal a host state restore gets.
-                restorePending_ = true;
-                loadSfzInstrument(kit);
+                enqueueSfz(kit, true);
             }
         } else {
             // PRESETS.md: an `sfz` hint that does not resolve is ignored. The
@@ -265,9 +327,9 @@ void SappKitProcessor::applyUserPresetParams(const sapp::userpresets::UserPreset
     // same suppression a fresh kit load uses: the timer's next quiet tick
     // clears it, and only genuine user tweaks after that arm a save again.
     // lastBusValid_ = false likewise stops this jump counting as a bus edit.
-    suppressMixSave_ = true;
-    mixSaveCountdown_ = -1;
-    lastBusValid_ = false;
+    suppressMixSave_.store(true);
+    mixSaveCountdown_.store(-1);
+    lastBusValid_.store(false);
     sapp::userpresets::apply(preset, apvts_);
 }
 
@@ -299,15 +361,23 @@ void SappKitProcessor::syncPresetParameter(int choiceIndex)
         return;
     if (choice->getIndex() == choiceIndex)
         return;
-    const juce::ScopedValueSetter<bool> guard(applyingPreset_, true);
+    applyingPreset_.store(true, std::memory_order_release);
     choice->setValueNotifyingHost(choice->convertTo0to1(float(choiceIndex)));
+    applyingPreset_.store(false, std::memory_order_release);
 }
 
 void SappKitProcessor::parameterChanged(const juce::String& parameterId, float newValue)
 {
-    if (applyingPreset_ || parameterId != sapp::userpresets::kPresetParamId)
+    if (parameterId != sapp::userpresets::kPresetParamId
+        || applyingPreset_.load(std::memory_order_acquire))
         return;
-    pendingPresetChoice_.store(int(newValue));
+    pendingPresetChoice_.store(int(newValue + 0.5f));
+    // Not ready from the instant the host asks for a different kit — a host
+    // that writes the parameter and immediately polls must not read the
+    // PREVIOUS kit's "ready" and render too early.
+    if (libraryReady_ != nullptr && libraryReady_->get())
+        *libraryReady_ = false;
+    queueCv_.notify_all();
 }
 
 // ----------------------------------------------------------- SappLink CC-in --
@@ -373,6 +443,7 @@ void SappKitProcessor::pushParamsToEngine()
     p.masterGainDb = pMaster_->load();
     p.limiter = pLimiter_->load() > 0.5f;
     p.quality = int(pQuality_->load());
+    p.clean = pClean_->load();     // KitEngine scales humanize by (1 - clean)
     engine_.setParams(p);
 }
 
@@ -431,6 +502,13 @@ void SappKitProcessor::processBlock(juce::AudioBuffer<float>& buffer,
                         buffer.getWritePointer(0), buffer.getWritePointer(1),
                         buffer.getNumSamples());
     }
+
+    // Silence → voices: flag it so the loader thread names what just sounded.
+    const int voices = engine_.sampler().activeVoiceCount();
+    if (voices > 0 && lastVoiceCount_ == 0)
+        audioBatchStarted_.store(true, std::memory_order_relaxed);
+    lastVoiceCount_ = voices;
+
     midi.clear();
 }
 
@@ -451,22 +529,149 @@ PadOverrides SappKitProcessor::readPadOverrides() const
 
 void SappKitProcessor::timerCallback()
 {
-    // Deferred kit load from a MIDI program change.
-    const int program = pendingProgram_.exchange(-1);
-    if (program >= 0)
-        applyKitProgram(program);
+    // EDITOR HOOK ONLY. Loading and the pad rebuild run on the loader thread
+    // (see the threading note in the header) — a host with no message loop
+    // never gets here, and must not need to.
+    if (hostDisplayDirty_.exchange(false))
+        updateHostDisplay(ChangeDetails{}.withProgramChanged(true));
+    if (instrumentChangedFlag_.exchange(false) && onInstrumentChanged)
+        onInstrumentChanged();
+}
 
-    // Deferred apply of the host-automatable `preset` chooser (same rule: the
-    // listener may fire on the audio thread, the load happens here).
-    const int choice = pendingPresetChoice_.exchange(-1);
-    if (choice >= 0)
-        applyPresetChoice(choice);
+// The loader thread: the one place a kit is installed, and the home of the
+// 8 Hz maintenance tick. Runs whether or not the host has a message loop,
+// which is the entire point (issue #1).
+void SappKitProcessor::loaderLoop()
+{
+    while (!loaderStop_.load(std::memory_order_acquire)) {
+        // MIDI / host program change first, then an explicit parameter move:
+        // when both land in the same pass the parameter (the deliberate host
+        // move) wins because it is enqueued last.
+        const int program = pendingProgram_.exchange(-1);
+        if (program >= 0)
+            applyKitProgram(program);
+        const int choice = pendingPresetChoice_.exchange(-1);
+        if (choice >= 0)
+            applyPresetChoice(choice);
 
-    // Debounce: pad knob turns change APVTS params; every tick we compare to
-    // the overrides last baked into the playing instrument and rebuild off
-    // the message thread when they differ. Region rebuild + sample copy is
-    // cheap for kit-sized libraries but far too slow for per-sample audio.
-    if (loading_.load() || rebuildInFlight_.load() || baseInstrument_ == nullptr)
+        LoadJob job;
+        bool haveJob = false;
+        {
+            std::lock_guard<std::mutex> lock(queueMutex_);
+            if (!loadQueue_.empty()) {
+                job = std::move(loadQueue_.front());
+                loadQueue_.pop_front();
+                haveJob = true;
+            }
+        }
+        if (haveJob) {
+            performLoad(std::move(job));
+            jobsOutstanding_.fetch_sub(1);
+            loading_.store(jobsOutstanding_.load() > 0);
+            publishReadiness();
+            continue;
+        }
+
+        loading_.store(false);
+        publishReadiness();
+        logAudioSourceIfNeeded();
+        maintenanceTick();
+
+        std::unique_lock<std::mutex> lock(queueMutex_);
+        queueCv_.wait_for(lock, std::chrono::milliseconds(5));
+    }
+}
+
+void SappKitProcessor::enqueueLoad(LoadJob job)
+{
+    jobsOutstanding_.fetch_add(1);
+    loading_.store(true);
+    if (libraryReady_ != nullptr && libraryReady_->get())
+        *libraryReady_ = false;
+    {
+        std::lock_guard<std::mutex> lock(queueMutex_);
+        loadQueue_.push_back(std::move(job));
+    }
+    queueCv_.notify_all();
+}
+
+void SappKitProcessor::performLoad(LoadJob job)
+{
+    if (job.generation != loadGeneration_.load())
+        return;  // a newer load was queued before this one started
+
+    if (job.kind == LoadJob::Kind::Diagnostic) {
+        sapp::sounds::LoadResult result;
+        result.instrument = makeDiagnosticKit();
+        result.ok = result.instrument != nullptr;
+        finishLoad(std::move(result), {}, job.generation, job.fromRestore);
+        return;
+    }
+
+    auto result = sapp::kit::loadKitSfz(job.path.toStdString());
+    finishLoad(std::move(result), job.path, job.generation, job.fromRestore);
+}
+
+void SappKitProcessor::publishReadiness()
+{
+    if (libraryReady_ == nullptr) return;
+    const bool ready = jobsOutstanding_.load() == 0
+                       && pendingPresetChoice_.load() < 0
+                       && pendingProgram_.load() < 0
+                       && installCount_.load() > 0;
+    if (libraryReady_->get() != ready)
+        *libraryReady_ = ready;
+}
+
+bool SappKitProcessor::libraryReady() const
+{
+    return libraryReady_ != nullptr && libraryReady_->get();
+}
+
+void SappKitProcessor::logInstalled(const juce::String& what, bool ok)
+{
+    logLine(juce::String("SappKit-kit: ") + (ok ? "loaded" : "FAILED")
+            + " source=\"" + what + "\" build=" SAPPKIT_VERSION);
+}
+
+void SappKitProcessor::logAudioSourceIfNeeded()
+{
+    // Voices started from silence: name the kit that produced them. This is
+    // the line that makes "the plugin is playing its built-in diagnostic kit"
+    // — or nothing at all — visible in the wild instead of only audible.
+    if (!audioBatchStarted_.exchange(false)) return;
+    const double nowMs = juce::Time::getMillisecondCounterHiRes();
+    if (nowMs - lastAudioSourceLogMs_ < 3000.0) return;
+    lastAudioSourceLogMs_ = nowMs;
+
+    juce::String source, name;
+    int pads = 0;
+    {
+        const juce::ScopedLock sl(loadLock_);
+        source = sfzPath_;
+        name = instrumentName_;
+        pads = model_.padCount;
+    }
+    if (source.isEmpty())
+        // ASCII only: these lines end up in host logs with every encoding.
+        source = "DIAGNOSTIC(no SFZ loaded - the built-in kit is sounding)";
+    logLine("SappKit-audio-source: kit=\"" + source + "\" name=\"" + name
+            + "\" pads=" + juce::String(pads) + " build=" SAPPKIT_VERSION
+            + " ready=" + juce::String(libraryReady() ? 1 : 0));
+}
+
+// Debounce: pad knob turns change APVTS params; every tick we compare to the
+// overrides last baked into the playing instrument and rebuild when they
+// differ. Region rebuild + sample copy is cheap for kit-sized libraries but
+// far too slow for per-sample audio, so it belongs here and not in
+// processBlock. Loader thread, ~8 Hz.
+void SappKitProcessor::maintenanceTick()
+{
+    const uint32_t nowMs = juce::Time::getMillisecondCounter();
+    if (nowMs - lastMaintenanceMs_ < 125) return;
+    lastMaintenanceMs_ = nowMs;
+
+    if (baseInstrument_ == nullptr)
         return;
     const PadOverrides wanted = readPadOverrides();
     bool same = true;
@@ -479,132 +684,127 @@ void SappKitProcessor::timerCallback()
 
     // Kit-bus changes count as mix edits too (no rebuild needed for them).
     const auto bus = readBusValues();
-    const bool busSame = lastBusValid_ && bus == lastBus_;
+    const bool busSame = lastBusValid_.load() && bus == lastBus_;
     lastBus_ = bus;
-    lastBusValid_ = true;
+    lastBusValid_.store(true);
 
     if (same && busSame) {
         // Quiet tick: the churn from a load/restore has settled; from here on
         // any parameter movement is the user (or the host) actually mixing.
-        suppressMixSave_ = false;
-        if (mixSaveCountdown_ > 0 && --mixSaveCountdown_ == 0) {
-            mixSaveCountdown_ = -1;
-            saveMixNow();
+        suppressMixSave_.store(false);
+        const int countdown = mixSaveCountdown_.load();
+        if (countdown > 0) {
+            mixSaveCountdown_.store(countdown - 1);
+            if (countdown - 1 == 0) {
+                mixSaveCountdown_.store(-1);
+                saveMixNow();
+            }
         }
         return;
     }
 
-    if (!suppressMixSave_)
-        mixSaveCountdown_ = 16;  // ~2 s after the last touch at 8 Hz
+    if (!suppressMixSave_.load())
+        mixSaveCountdown_.store(16);  // ~2 s after the last touch at 8 Hz
 
     if (!same) {
-        rebuildInFlight_ = true;
         appliedOverrides_ = wanted;
-        rebuildOverriddenInstrument();
+        sapp::kit::KitModel model;
+        {
+            const juce::ScopedLock sl(loadLock_);
+            model = model_;
+        }
+        engine_.setInstrument(applyPadOverrides(baseInstrument_, model, appliedOverrides_));
+        engine_.collectRetired();
     }
-}
-
-void SappKitProcessor::rebuildOverriddenInstrument()
-{
-    const auto base = baseInstrument_;
-    const auto model = model_;
-    const auto overrides = appliedOverrides_;
-    const uint64_t generation = loadGeneration_.load();
-    std::thread([this, base, model, overrides, generation] {
-        auto rebuilt = applyPadOverrides(base, model, overrides);
-        juce::MessageManager::callAsync([this, rebuilt = std::move(rebuilt), generation] {
-            if (generation == loadGeneration_.load()) {
-                engine_.setInstrument(rebuilt);
-                engine_.collectRetired();
-            }
-            rebuildInFlight_ = false;
-        });
-    }).detach();
 }
 
 // ------------------------------------------------------------- instruments --
 
-void SappKitProcessor::loadDiagnosticKit()
+void SappKitProcessor::enqueueDiagnostic(bool fromRestore)
 {
-    const uint64_t generation = ++loadGeneration_;
-    loading_ = true;
+    LoadJob job;
+    job.kind = LoadJob::Kind::Diagnostic;
+    job.generation = ++loadGeneration_;
+    job.fromRestore = fromRestore;
     {
         const juce::ScopedLock sl(loadLock_);
         loadStatus_ = "Generating diagnostic kit...";
     }
-    std::thread([this, generation] {
-        auto inst = makeDiagnosticKit();
-        sapp::sounds::LoadResult result;
-        result.instrument = inst;
-        result.ok = true;
-        juce::MessageManager::callAsync([this, result = std::move(result), generation]() mutable {
-            finishLoad(std::move(result), {}, generation);
-        });
-    }).detach();
+    enqueueLoad(std::move(job));
 }
 
-void SappKitProcessor::loadSfzInstrument(const juce::File& sfzFile)
+void SappKitProcessor::enqueueSfz(const juce::File& sfzFile, bool fromRestore)
 {
-    const uint64_t generation = ++loadGeneration_;
-    loading_ = true;
+    LoadJob job;
+    job.kind = LoadJob::Kind::Sfz;
+    job.path = sfzFile.getFullPathName();
+    job.generation = ++loadGeneration_;
+    job.fromRestore = fromRestore;
     {
         const juce::ScopedLock sl(loadLock_);
         loadStatus_ = "Loading " + sfzFile.getFileName() + "...";
     }
-    const juce::String path = sfzFile.getFullPathName();
-    std::thread([this, path, generation] {
-        auto result = sapp::kit::loadKitSfz(path.toStdString());
-        juce::MessageManager::callAsync([this, result = std::move(result), path, generation]() mutable {
-            finishLoad(std::move(result), path, generation);
-        });
-    }).detach();
+    enqueueLoad(std::move(job));
+}
+
+void SappKitProcessor::loadDiagnosticKit() { enqueueDiagnostic(false); }
+
+void SappKitProcessor::loadSfzInstrument(const juce::File& sfzFile)
+{
+    enqueueSfz(sfzFile, false);
 }
 
 void SappKitProcessor::finishLoad(sapp::sounds::LoadResult result,
-                                  const juce::String& path, uint64_t generation)
+                                  const juce::String& path, uint64_t generation,
+                                  bool fromRestore)
 {
     if (generation != loadGeneration_.load()) return;  // superseded
-    loading_ = false;
 
-    const juce::ScopedLock sl(loadLock_);
-    if (!result.ok || result.instrument == nullptr) {
-        loadStatus_ = "Load failed";
-        for (const auto& d : result.diagnostics)
-            if (d.severity == sapp::sounds::Severity::Error) {
-                loadStatus_ = "Load failed: " + juce::String(d.message);
-                break;
-            }
-    } else {
-        baseInstrument_ = result.instrument;
-        model_ = buildKitModel(result.instrument->definition);
-        sfzPath_ = path;
-        instrumentName_ = juce::String(result.instrument->definition.name);
+    bool installed = false;
+    {
+        const juce::ScopedLock sl(loadLock_);
+        if (!result.ok || result.instrument == nullptr) {
+            loadStatus_ = "Load failed";
+            for (const auto& d : result.diagnostics)
+                if (d.severity == sapp::sounds::Severity::Error) {
+                    loadStatus_ = "Load failed: " + juce::String(d.message);
+                    break;
+                }
+        } else {
+            baseInstrument_ = result.instrument;
+            model_ = buildKitModel(result.instrument->definition);
+            sfzPath_ = path;
+            instrumentName_ = juce::String(result.instrument->definition.name);
 
-        // Fresh load: the kit brings its own saved mix (or clean defaults) so
-        // one kit's pad tweaks never bleed onto another. Host state restores
-        // skip this — the DAW session already carries the mix it saved.
-        const bool fromRestore = restorePending_;
-        restorePending_ = false;
-        suppressMixSave_ = true;
-        mixSaveCountdown_ = -1;
-        lastBusValid_ = false;
-        if (!fromRestore) applySavedMixOrDefaults();
+            // Fresh load: the kit brings its own saved mix (or clean defaults)
+            // so one kit's pad tweaks never bleed onto another. Host state
+            // restores and user presets skip this — they already carry a mix.
+            suppressMixSave_.store(true);
+            mixSaveCountdown_.store(-1);
+            lastBusValid_.store(false);
+            if (!fromRestore) applySavedMixOrDefaults();
 
-        appliedOverrides_ = readPadOverrides();
-        engine_.setInstrument(applyPadOverrides(baseInstrument_, model_, appliedOverrides_));
-        engine_.collectRetired();
-        loadStatus_ = result.missingSamples.empty()
-                          ? juce::String(model_.padCount) + " pads ready"
-                          : juce::String(result.missingSamples.size()) + " samples missing";
+            appliedOverrides_ = readPadOverrides();
+            engine_.setInstrument(applyPadOverrides(baseInstrument_, model_, appliedOverrides_));
+            engine_.collectRetired();
+            loadStatus_ = result.missingSamples.empty()
+                              ? juce::String(model_.padCount) + " pads ready"
+                              : juce::String(result.missingSamples.size()) + " samples missing";
 
-        // Keep getCurrentProgram honest for kits reached via the sounds
-        // browser or host state restore, not just via program change.
-        const int program =
-            factorykits::programForKitFile(sfzPath_, SoundsPanel::samplesRoot());
-        if (program >= 0)
-            currentProgram_.store(program);
+            // Keep getCurrentProgram honest for kits reached via the sounds
+            // browser or host state restore, not just via program change.
+            const int program =
+                factorykits::programForKitFile(sfzPath_, SoundsPanel::samplesRoot());
+            if (program >= 0)
+                currentProgram_.store(program);
+            installed = true;
+        }
     }
-    if (onInstrumentChanged) onInstrumentChanged();
+    if (installed)
+        installCount_.fetch_add(1);
+    logInstalled(path.isEmpty() ? juce::String("DIAGNOSTIC(built-in kit)") : path,
+                 installed);
+    instrumentChangedFlag_.store(true);
 }
 
 // ---------------------------------------------------------------- kit mix ---
@@ -620,6 +820,7 @@ juce::File SappKitProcessor::kitMixDir()
 
 juce::File SappKitProcessor::currentKitMixFile() const
 {
+    const juce::ScopedLock sl(loadLock_);   // recursive: finishLoad holds it
     return kitMixDir().getChildFile(
         juce::String(sapp::kit::kitMixFileName(sfzPath_.toStdString())));
 }
@@ -633,17 +834,19 @@ void SappKitProcessor::setParamValue(const juce::String& paramId, float plainVal
 }
 
 // The kit-bus parameter IDs stored in a mix file, in readBusValues() order.
-static const char* const kBusIds[10] = {
+// `clean` is appended LAST so mix files written before it existed still
+// parse — a missing key just leaves the parameter alone (busValue -> null).
+static const char* const kBusIds[11] = {
     "punch", "squash", "crush", "roomLevel", "roomSize",
-    "width", "humanize", "masterGain", "limiter", "quality",
+    "width", "humanize", "masterGain", "limiter", "quality", "clean",
 };
 
-std::array<float, 10> SappKitProcessor::readBusValues() const
+std::array<float, 11> SappKitProcessor::readBusValues() const
 {
     return {pPunch_->load(), pSquash_->load(), pCrush_->load(),
             pRoomLevel_->load(), pRoomSize_->load(), pWidth_->load(),
             pHumanize_->load(), pMaster_->load(), pLimiter_->load(),
-            pQuality_->load()};
+            pQuality_->load(), pClean_->load()};
 }
 
 void SappKitProcessor::applySavedMixOrDefaults()
@@ -675,9 +878,16 @@ void SappKitProcessor::applySavedMixOrDefaults()
 
 void SappKitProcessor::saveMixNow()
 {
-    auto mix = sapp::kit::captureMix(sfzPath_.toStdString(),
-                                     instrumentName_.toStdString(),
-                                     model_, appliedOverrides_);
+    // Loader thread. The kit-mix schema stays at the 10 historical bus ids —
+    // `clean` is a host/station control, carried by host state and by user
+    // presets, not by a per-kit mix file.
+    sapp::kit::KitMix mix;
+    {
+        const juce::ScopedLock sl(loadLock_);
+        mix = sapp::kit::captureMix(sfzPath_.toStdString(),
+                                    instrumentName_.toStdString(),
+                                    model_, appliedOverrides_);
+    }
     const auto bus = readBusValues();
     for (size_t i = 0; i < bus.size(); ++i)
         mix.setBus(kBusIds[i], bus[i]);
@@ -694,6 +904,12 @@ juce::String SappKitProcessor::currentInstrumentName() const
 {
     const juce::ScopedLock sl(loadLock_);
     return instrumentName_;
+}
+
+juce::String SappKitProcessor::currentInstrumentPath() const
+{
+    const juce::ScopedLock sl(loadLock_);
+    return sfzPath_;
 }
 
 juce::String SappKitProcessor::loadStatus() const
@@ -726,11 +942,13 @@ void SappKitProcessor::setStateInformation(const void* data, int sizeInBytes)
         if (!state.isValid()) return;
         apvts_.replaceState(state);
         const juce::String path = state.getProperty("sfzPath", "").toString();
-        restorePending_ = true;  // host state carries the mix; skip the file
+        // Host state carries the mix; the kit must not overwrite it from its
+        // own saved-mix file. The flag rides on the JOB, not on a member, so
+        // a concurrent load can never steal or lose it.
         if (path.isNotEmpty() && juce::File(path).existsAsFile())
-            loadSfzInstrument(juce::File(path));
+            enqueueSfz(juce::File(path), true);
         else
-            loadDiagnosticKit();
+            enqueueDiagnostic(true);
     }
 }
 

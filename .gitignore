@@ -9,6 +9,7 @@
 node_modules/
 dist/
 build/
+build-plugin/
 out/
 .next/
 target/

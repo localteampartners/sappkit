@@ -1,0 +1,7 @@
+// Headless-regression fixture (sappkit #1): the LOUD reference kit, shaped
+// like AVL Black Pearl so factory program 2 resolves against it.
+// Three GM pads is enough to answer "did the named kit sound?" from audio.
+<region> sample=../drum-hit.wav key=36 pitch_keycenter=36 volume=0   // Kick
+<region> sample=../drum-hit.wav key=38 pitch_keycenter=36 volume=-2 transpose=7   // Snare
+<region> sample=../drum-hit.wav key=42 pitch_keycenter=36 volume=-6 transpose=24 group=1 off_by=1   // Closed hat
+<region> sample=../drum-hit.wav key=46 pitch_keycenter=36 volume=-6 transpose=22 group=1 off_by=1   // Open hat

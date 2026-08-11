@@ -11,6 +11,7 @@ namespace sapp::kit::sapplink {
 const std::array<CCMapping, kNumMappings>& mappings()
 {
     static const std::array<CCMapping, kNumMappings> table { {
+        { 3,  "clean",      &KitParams::clean,        0.0f,   1.0f,  Curve::Linear },
         { 7,  "masterGain", &KitParams::masterGainDb, -24.0f, 12.0f, Curve::Linear },
         { 14, "punch",      &KitParams::punch,        0.0f,   1.0f,  Curve::Linear },
         { 15, "squash",     &KitParams::squash,       0.0f,   1.0f,  Curve::Linear },

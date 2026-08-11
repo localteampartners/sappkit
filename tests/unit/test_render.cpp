@@ -101,3 +101,55 @@ TEST_CASE("updater version comparison", "[updater]")
     CHECK_FALSE(sapp::kit::isNewerVersion("v0.3.0", "0.3.0"));
     CHECK_FALSE(sapp::kit::isNewerVersion("v0.2.9", "0.3.0"));
 }
+
+TEST_CASE("clean scales the modeled imperfections out", "[render][clean]")
+{
+    // Suite-wide `clean` convention (SappLink CC 3): 0 = every modeled
+    // imperfection as designed, 1 = none. SappKit's only imperfection source
+    // is `humanize` (per-hit tune scatter), so clean=1 must be bit-identical
+    // to humanize=0 — and must never silence the kit.
+    auto inst = makeDiagnosticKit();
+
+    KitRenderOptions modeled;
+    modeled.tailSeconds = 1.0;
+    modeled.params.humanize = 0.6f;
+    modeled.params.clean = 0.0f;
+
+    KitRenderOptions cleaned = modeled;
+    cleaned.params.clean = 1.0f;
+
+    KitRenderOptions noHumanize = modeled;
+    noHumanize.params.humanize = 0.0f;
+
+    const auto a = renderKit(inst, groove(), modeled);
+    const auto b = renderKit(inst, groove(), cleaned);
+    const auto c = renderKit(inst, groove(), noHumanize);
+
+    REQUIRE(a.left.size() == b.left.size());
+    REQUIRE(b.left.size() == c.left.size());
+
+    bool cleanEqualsNoHumanize = true;
+    bool cleanDiffersFromModeled = false;
+    for (size_t i = 0; i < b.left.size(); ++i) {
+        if (b.left[i] != c.left[i]) cleanEqualsNoHumanize = false;
+        if (b.left[i] != a.left[i]) cleanDiffersFromModeled = true;
+    }
+    CHECK(cleanEqualsNoHumanize);
+    CHECK(cleanDiffersFromModeled);
+
+    // No parameter of this instrument may default — or be driven — to silence.
+    CHECK(b.peak > 0.05f);
+
+    // Half-clean lands between the two, not on either.
+    KitRenderOptions half = modeled;
+    half.params.clean = 0.5f;
+    const auto d = renderKit(inst, groove(), half);
+    bool halfDiffersFromBoth = false;
+    for (size_t i = 0; i < d.left.size(); ++i)
+        if (d.left[i] != a.left[i] && d.left[i] != b.left[i]) {
+            halfDiffersFromBoth = true;
+            break;
+        }
+    CHECK(halfDiffersFromBoth);
+    CHECK(d.peak > 0.05f);
+}

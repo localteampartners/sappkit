@@ -6,6 +6,47 @@ The *why* behind choices that aren't self-evident from the code.
 
 ---
 
+## 2026-08-10 — A loader thread installs kits; the message loop is never load-bearing
+
+**Decision:** every instrument install — construction diagnostic, MIDI/host
+program change, the `preset` parameter, user presets, host state restore,
+the sounds browser — is enqueued as a `LoadJob` and performed by a dedicated
+loader thread, which also runs the 8 Hz pad-override / mix-save tick. The
+`juce::Timer` is reduced to an editor hook, and the thread is joined in the
+destructor.
+**Context:** issue #1. A VST3 plug-in inside a non-JUCE headless host has a
+MessageManager that nobody pumps, so `MessageManager::callAsync` and
+`juce::Timer` never fire — silently. Measured -200.00 dBFS, 0 voices, 0
+pads, with the plugin contributing exactly zero samples. Identical to
+sapporchestra #2 and sappchoir #1.
+**Alternatives considered:** pumping the loop ourselves from `processBlock`
+(rejected — a plug-in must never drive the host's message loop, and it would
+run SFZ parsing on the audio thread); longer settle windows in the station
+(rejected — waiting does not turn a loop nobody is turning).
+**Tradeoffs:** parameter writes such as `applySavedMixOrDefaults` now happen
+off the message thread. That is already how CC-in works here, and it goes
+through the same normalized `setValueNotifyingHost` path host automation
+uses. `updateHostDisplay` still needs the message thread, so it is deferred
+to the timer via a flag — it is a host-notification nicety, never a
+correctness requirement.
+
+## 2026-08-10 — `libraryReady` lives outside the APVTS and is declared meta
+
+**Decision:** a `juce::AudioParameterBool` added last with `addParameter()`,
+non-automatable and `withMeta(true)`, never in the parameter tree.
+**Context:** the station needs to poll readiness instead of guessing a
+settle window (sappradio#3). Keeping it out of the APVTS means host state
+can never restore a stale "ready", and it never lands in a saved user
+preset. Appended last so no existing automation index moves.
+**Alternatives considered:** a meter-category parameter (rejected — the
+value still only reaches the VST3 controller through
+`outputParameterChanges`, so it buys nothing); an APVTS entry (rejected —
+restorable staleness).
+**Tradeoffs:** through the VST3 controller the value appears only after a
+`processBlock`; a host holding the AudioProcessor sees it immediately.
+`withMeta` is required or auval fails its parameter-persistence check,
+because the plugin keeps rewriting a value the host wrote.
+
 ## 2026-08-06 — Pad overrides rebuild the instrument, not the voice path
 
 **Decision:** per-pad tune/decay/pan/level are baked into a copied
