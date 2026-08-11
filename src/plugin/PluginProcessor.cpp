@@ -487,6 +487,16 @@ void SappKitProcessor::processBlock(juce::AudioBuffer<float>& buffer,
             // Factory kit select; the load runs from the timer (message
             // thread) — never from the audio thread.
             pendingProgram_.store(msg.getProgramChangeNumber());
+            // Not ready from the instant the host asks (sappkeys #4).
+            // publishReadiness() already accounts for the queued program, but
+            // it only runs on the loader thread — a host that sends the
+            // program change and polls in the same breath would read the
+            // OUTGOING kit's "ready" in the gap. Clearing here, on the
+            // calling thread, closes it. Writing a parameter from
+            // processBlock is this processor's normal path already
+            // (advanceCcSlews does it every block).
+            if (libraryReady_ != nullptr && libraryReady_->get())
+                *libraryReady_ = false;
             continue;
         } else {
             continue;

@@ -6,6 +6,30 @@ Newest first. Format: `## YYYY-MM-DD — short title`, then bullets.
 
 ---
 
+## 2026-08-11 — v0.8.0: a MIDI program change now drops `libraryReady` at once
+
+- Audit of sappkeys #4 ("`libraryReady` lies, so a host that trusts it renders
+  silence") against this repo. The `preset` parameter and `setCurrentProgram()`
+  paths were already correct — both clear the flag synchronously and
+  `publishReadiness()` counts the queued request — but **the MIDI
+  program-change branch of `processBlock()` was not**. The audio thread stored
+  `pendingProgram_` and returned; readiness was only recomputed on the loader
+  thread's next pass (~5 ms), so a host that sent the program change and
+  polled in the same breath read the OUTGOING kit's "ready" and could render
+  into the load that followed.
+- Measured, `sappkit-headless selftest`, with a settled instance switched by
+  program change: before — `libraryReady` still 1 the instant `processBlock()`
+  returned, and the settle loop exited immediately on the PREVIOUS kit
+  (`Black_Pearl_5pc.sfz` where the host asked for `gogodze-phu/Kit.sfz`);
+  after — 0 immediately, and the flag returns only with the asked-for kit
+  installed.
+- Fix: clear the flag on the calling thread, in the program-change branch,
+  right where the program is stored. Writing a parameter from `processBlock()`
+  is this processor's normal path already (`advanceCcSlews()` does it every
+  block).
+- 7 new headless checks (mid-session swap through the `preset` parameter,
+  `setCurrentProgram()` and MIDI program change). `./verify.sh` green.
+
 ## 2026-08-10 — v0.7.0: kit loading works headless (issue #1)
 
 - **THE BUG.** Every kit install went through `MessageManager::callAsync`

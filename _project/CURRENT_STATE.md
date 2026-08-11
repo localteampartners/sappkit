@@ -2,9 +2,24 @@
 
 <!-- UPDATE WHEN: a feature ships, a deploy happens, something breaks, or something gets fixed. This file answers "what's the project like *right now*?" -->
 
-**Last verified:** 2026-08-10
+**Last verified:** 2026-08-11
 
 ---
+
+## Shipped 2026-08-11 — v0.8.0 (`libraryReady` drops on a MIDI program change)
+
+- Audit of sappkeys #4 against this repo. The `preset` parameter and
+  `setCurrentProgram()` paths were already honest; the MIDI program-change
+  branch of `processBlock()` was not — it queued the program on the audio
+  thread and left readiness to the loader thread's next pass (~5 ms), so a
+  host that sent the program change and polled immediately read the previous
+  kit's "ready" and could render into the load. Now cleared on the calling
+  thread, right where the program is stored.
+- 7 new headless checks cover a mid-session swap through the `preset`
+  parameter, `setCurrentProgram()` and MIDI program change; the program-change
+  pair fails on the previous build. `./verify.sh` green.
+- Not tagged — the release is driven separately. The CI guard checks the tag
+  against `project(... VERSION ...)` in CMakeLists.txt, now 0.8.0.
 
 ## Shipped 2026-08-07 — v0.3.0 (in-plugin updater)
 

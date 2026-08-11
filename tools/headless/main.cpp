@@ -317,6 +317,62 @@ int runSelftest(const juce::String& fixtureRoot)
         processor.reset();
     }
 
+    // ---- sappkeys #4: readiness must drop on a MID-SESSION swap -----------
+    // The sibling fault: a plugin that has already finished its first load
+    // keeps reporting THAT kit's "ready" while the next one is starting. A
+    // station polling the flag stops waiting and renders into the load. The
+    // flag must go 0 synchronously, on the thread that asked, for every entry
+    // point that can begin a load — not only for the first one.
+    {
+        auto settle = [](sappkit::SappKitProcessor& p) {
+            const auto deadline = juce::Time::getMillisecondCounter() + 8000u;
+            while (juce::Time::getMillisecondCounter() < deadline && !p.libraryReady())
+                juce::Thread::sleep(5);
+            return p.libraryReady();
+        };
+        const auto loudSfz = root.getChildFile("avl-drumkits")
+                                 .getChildFile("Black_Pearl_5pc.sfz").getFullPathName();
+        const auto quietSfz =
+            root.getChildFile("gogodze-phu").getChildFile("Kit.sfz").getFullPathName();
+
+        auto processor = std::make_unique<sappkit::SappKitProcessor>();
+        processor->prepareToPlay(48000.0, 512);
+        auto* parameter = processor->valueTree().getParameter("preset");
+        auto select = [&](int program) {
+            parameter->setValueNotifyingHost(parameter->convertTo0to1(float(program)));
+        };
+
+        select(kLoudProgram);
+        check(settle(*processor) && processor->currentInstrumentPath() == loudSfz,
+              "mid-session: the first selection settled on its kit");
+
+        // No sleep, no dispatch loop, nothing: read the flag straight back.
+        select(kQuietProgram);
+        check(!processor->libraryReady(),
+              "mid-session: libraryReady reads 0 the instant the `preset` parameter "
+              "moves to another kit");
+        check(settle(*processor) && processor->currentInstrumentPath() == quietSfz,
+              "mid-session: the flag returns only with the NEW kit installed");
+
+        processor->setCurrentProgram(kLoudProgram);
+        check(!processor->libraryReady(),
+              "mid-session: libraryReady reads 0 the instant setCurrentProgram() returns");
+        check(settle(*processor) && processor->currentInstrumentPath() == loudSfz,
+              "mid-session: the host program API's kit is in when the flag returns");
+
+        juce::AudioBuffer<float> buffer(2, 512);
+        juce::MidiBuffer midi;
+        midi.addEvent(juce::MidiMessage::programChange(10, kQuietProgram), 0);
+        buffer.clear();
+        processor->processBlock(buffer, midi);
+        check(!processor->libraryReady(),
+              "mid-session: libraryReady reads 0 the instant a MIDI program change "
+              "lands in processBlock");
+        check(settle(*processor) && processor->currentInstrumentPath() == quietSfz,
+              "mid-session: the program change's kit is in when the flag returns");
+        processor.reset();
+    }
+
     // ---- state restore installs the kit headlessly ------------------------
     {
         auto settle = [](sappkit::SappKitProcessor& p) {
