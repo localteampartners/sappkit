@@ -14,7 +14,7 @@ per entry: the rule, then the why (when the why isn't obvious).
 ## Toolchain & versions
 
 - JUCE is pinned to 8.0.15. A worktree or fresh plugin build can reuse the
-  shared checkout: `-DFETCHCONTENT_SOURCE_DIR_JUCE=/Users/michael/apps/sappsynth/build/_deps/juce-src`.
+  shared checkout: `-DFETCHCONTENT_SOURCE_DIR_JUCE=/Users/michael/apps/sappaudio/sappsynth/build/_deps/juce-src`.
 - The version lives in exactly one place: `project(SappKit VERSION ...)` in
   CMakeLists.txt. The CI release guard reads that and nothing else, and the
   in-plugin updater compares it against the newest GitHub tag.

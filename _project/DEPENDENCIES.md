@@ -19,7 +19,7 @@ None — no hosted services, no billing, no credentials.
 
 ## Fetched libraries (build-time, pinned)
 
-- JUCE 8.0.15 (GitHub tag; reuse `~/apps/sappsynth/build/_deps/juce-src`)
+- JUCE 8.0.15 (GitHub tag; reuse `~/apps/sappaudio/sappsynth/build/_deps/juce-src`)
 - Catch2 v3.7.1
 
 ## Sample libraries (runtime, user-fetched, never committed)

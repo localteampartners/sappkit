@@ -12,7 +12,7 @@ CLI with deterministic renders, SappLink CC-in.
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
-  -DFETCHCONTENT_SOURCE_DIR_JUCE="$HOME/apps/sappsynth/build/_deps/juce-src"
+  -DFETCHCONTENT_SOURCE_DIR_JUCE="$HOME/apps/sappaudio/sappsynth/build/_deps/juce-src"
 cmake --build build -j8 --target SappKitPlugin_Standalone sappkit-cli SappKitTests
 ./build/SappKitTests                       # 28 tests: chokes, RR, pads, determinism
 open "build/SappKitPlugin_artefacts/Release/Standalone/SappKit.app"

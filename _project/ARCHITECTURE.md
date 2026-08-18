@@ -110,6 +110,6 @@ SappLink CC-in: mapped CCs → APVTS slew (plugin) / KitParams (CLI render)
   Fine for kit-sized libraries; the plugin debounces rebuilds (8 Hz timer) —
   don't call it per-block or per-knob-tick.
 - Reuse the JUCE checkout when configuring:
-  `-DFETCHCONTENT_SOURCE_DIR_JUCE=~/apps/sappsynth/build/_deps/juce-src`.
+  `-DFETCHCONTENT_SOURCE_DIR_JUCE=~/apps/sappaudio/sappsynth/build/_deps/juce-src`.
 - Parameter IDs (kit + `pad<N>Tune/Decay/Pan/Level`) are compatibility
   contracts — never reuse or renumber.

@@ -14,7 +14,7 @@ The authoritative source for "how do I operate this thing?"
 # Needs the sibling engine checkout at ~/apps/sappsounds (or it FetchContents
 # from GitHub). Reuse the shared JUCE checkout to skip a 300 MB clone:
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
-  -DFETCHCONTENT_SOURCE_DIR_JUCE="$HOME/apps/sappsynth/build/_deps/juce-src"
+  -DFETCHCONTENT_SOURCE_DIR_JUCE="$HOME/apps/sappaudio/sappsynth/build/_deps/juce-src"
 ```
 
 ### Build + run the standalone app
