@@ -282,10 +282,14 @@ public:
                 if (lfoPhase_[i] > 6.2831853f) lfoPhase_[i] -= 6.2831853f;
                 const float delay = delaySamples_[i] + std::sin(lfoPhase_[i]) * 2.5f;
                 const int size = int(lines_[i].size());
-                float pos = float(writePos_[i]) - delay;
-                while (pos < 0.0f) pos += float(size);
-                const int i0 = int(pos);
-                const float frac = pos - float(i0);
+                // double, wrapped on both sides, index clamped: in float a
+                // position of (size - 1e-5) rounds to `size` and reads one past
+                // the line (the sappsynth hall's issue #3 overflow).
+                double pos = double(writePos_[i]) - double(delay);
+                while (pos < 0.0) pos += size;
+                while (pos >= size) pos -= size;
+                const int i0 = std::min(size - 1, std::max(0, int(pos)));
+                const float frac = float(pos - i0);
                 const int i1 = i0 + 1 >= size ? 0 : i0 + 1;
                 read[i] = lines_[i][size_t(i0)] * (1.0f - frac) + lines_[i][size_t(i1)] * frac;
                 sum += read[i];

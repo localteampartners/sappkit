@@ -6,6 +6,15 @@ Newest first. Format: `## YYYY-MM-DD — short title`, then bullets.
 
 ---
 
+## 2026-10-10 — 0.9.2: plate delay-line over-read
+
+The plate's read position was computed in float, wrapped by adding the line
+length when negative, and cast to int; in float, (size - 1e-5) rounds to
+exactly `size`, so one sample in a long while was read one past the
+allocation. Found by AddressSanitizer in the sappsynth hall this plate was
+cut down from (sappsynth issue #3). Positions are double now, wrapped on both
+sides, index clamped. No audible change.
+
 ## 2026-10-09 — 0.9.1: the drum bus grows a plate and glue
 
 (0.9.0 was tagged first and failed its Windows build: the plugin's CC slew
