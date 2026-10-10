@@ -16,7 +16,10 @@
     { "id": "width",      "label": "Width",      "cc": 17,  "range": [0, 2],    "curve": "linear", "tags": ["width", "space"] },
     { "id": "humanize",   "label": "Humanize",   "cc": 18,  "range": [0, 1],    "curve": "linear", "tags": ["humanize", "feel", "imperfection"] },
     { "id": "roomLevel",  "label": "Room",       "cc": 91,  "range": [0, 1],    "curve": "linear", "tags": ["space", "reverb", "room"] },
-    { "id": "roomSize",   "label": "Room Size",  "cc": 92,  "range": [0, 1],    "curve": "linear", "tags": ["space", "room"] }
+    { "id": "roomSize",   "label": "Room Size",  "cc": 92,  "range": [0, 1],    "curve": "linear", "tags": ["space", "room"] },
+    { "id": "glue", "label": "Glue", "cc": 19, "range": [0, 1], "curve": "linear", "tags": ["punch", "glue", "intensity"] },
+    { "id": "plateLevel", "label": "Plate", "cc": 93, "range": [0, 1], "curve": "linear", "tags": ["space", "tail"] },
+    { "id": "plateDecay", "label": "Plate Decay", "cc": 20, "range": [0.4, 3.0], "curve": "log", "tags": ["space", "tail"] }
   ],
   "presets": [
     { "name": "Diagnostic Kit", "program": 0 },

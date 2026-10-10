@@ -272,3 +272,29 @@ TEST_CASE("output is always finite, limiter caps extremes", "[kit]")
         REQUIRE(std::abs(v) <= 1.0f);
     }
 }
+
+TEST_CASE("drum bus (v0.9): the plate hangs for seconds, glue lifts the quiet tail", "[kit][fx][e8]")
+{
+    KitEngine engine;
+    KitParams flat = dryParams();
+    KitParams plated = flat;
+    plated.plateLevel = 1.0f;
+    plated.plateDecay = 2.5f;
+    std::vector<MidiEvent> hit{noteOn(0, 38, 120)};
+    const auto dry = run(freshEngine(engine, flat), hit, 48000 * 3);
+    KitEngine engine2;
+    const auto wet = run(freshEngine(engine2, plated), hit, 48000 * 3);
+    // 1.5-2.0 s after a single snare: the plate is still ringing, the dry hit is gone
+    REQUIRE(energyBetween(wet, 1.5, 2.0) > energyBetween(dry, 1.5, 2.0) * 50.0);
+    REQUIRE(energyBetween(wet, 1.5, 2.0) > 1.0e-6);
+
+    KitParams glued = flat;
+    glued.glue = 1.0f;
+    KitEngine engine3;
+    const auto glue = run(freshEngine(engine3, glued), hit, 48000);
+    // parallel compression: the decay's quiet part gains more than its peak does
+    const double tailRatio = energyBetween(glue, 0.15, 0.4) / std::max(1e-12, energyBetween(dry, 0.15, 0.4));
+    const double headRatio = energyBetween(glue, 0.0, 0.03) / std::max(1e-12, energyBetween(dry, 0.0, 0.03));
+    INFO("tail " << tailRatio << " head " << headRatio);
+    REQUIRE(tailRatio > headRatio);
+}

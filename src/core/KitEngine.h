@@ -26,6 +26,10 @@ struct KitParams {
     float punch = 0.35f;       // 0..1 transient emphasis
     float squash = 0.25f;      // 0..1 bus compression
     float crush = 0.0f;        // 0..1 bit/rate decimator character
+    // v0.9 drum bus (MUSIC-QUALITY-PLAN E8)
+    float glue = 0.0f;         // 0..1 parallel compression blend (the New York trick)
+    float plateLevel = 0.0f;   // 0..1 plate send
+    float plateDecay = 1.4f;   // 0.4..3.0 s
     // Space
     float roomLevel = 0.18f;   // 0..1 small-room mix
     float roomSize = 0.4f;     // 0..1 closet → live room
@@ -74,22 +78,25 @@ private:
     TransientShaper punch_;
     Crusher crusher_;
     BusCompressor squash_;
+    BusCompressor glue_;       // the parallel (crushed) copy
     SmallRoom room_;
+    Plate plate_;
 
     // Double-buffered params: control writes inactive slot then flips.
     KitParams paramSlots_[2];
     std::atomic<int> paramIndex_{0};
 
     // Smoothed audio-thread state.
-    float smRoom_ = 0.18f, smMaster_ = 1.0f;
+    float smRoom_ = 0.18f, smMaster_ = 1.0f, smGlue_ = 0.0f, smPlate_ = 0.0f;
 
     // Scratch buffers (allocated in prepare).
-    std::vector<float> dryL_, dryR_, roomL_, roomR_;
+    std::vector<float> dryL_, dryR_, roomL_, roomR_, glueL_, glueR_, plateL_, plateR_;
 
     double sampleRate_ = 48000.0;
     int maxBlock_ = 0;
     int lastQuality_ = -1;
     float lastHumanize_ = -1.0f, lastRoomSize_ = -1.0f;
+    float lastPlateDecay_ = -1.0f;
 };
 
 } // namespace sapp::kit

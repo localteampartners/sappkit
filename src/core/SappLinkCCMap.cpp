@@ -20,6 +20,9 @@ const std::array<CCMapping, kNumMappings>& mappings()
         { 18, "humanize",   &KitParams::humanize,     0.0f,   1.0f,  Curve::Linear },
         { 91, "roomLevel",  &KitParams::roomLevel,    0.0f,   1.0f,  Curve::Linear },
         { 92, "roomSize",   &KitParams::roomSize,     0.0f,   1.0f,  Curve::Linear },
+        { 19, "glue",       &KitParams::glue,         0.0f,   1.0f,  Curve::Linear },   // v0.9
+        { 93, "plateLevel", &KitParams::plateLevel,   0.0f,   1.0f,  Curve::Linear },   // v0.9
+        { 20, "plateDecay", &KitParams::plateDecay,   0.4f,   3.0f,  Curve::Log },      // v0.9
     } };
     return table;
 }

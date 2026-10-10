@@ -26,13 +26,20 @@ void KitEngine::prepare(double sampleRate, int maxBlockFrames)
     punch_.prepare(sampleRate);
     crusher_.prepare(sampleRate);
     squash_.prepare(sampleRate);
+    glue_.prepare(sampleRate);
     room_.prepare(sampleRate);
+    plate_.prepare(sampleRate);
 
     const size_t n = size_t(maxBlockFrames);
     dryL_.assign(n, 0.0f);
     dryR_.assign(n, 0.0f);
     roomL_.assign(n, 0.0f);
     roomR_.assign(n, 0.0f);
+    glueL_.assign(n, 0.0f);
+    glueR_.assign(n, 0.0f);
+    plateL_.assign(n, 0.0f);
+    plateR_.assign(n, 0.0f);
+    lastPlateDecay_ = -1.0f;
 
     lastQuality_ = -1;
     lastHumanize_ = lastRoomSize_ = -1.0f;
@@ -101,8 +108,24 @@ void KitEngine::process(const MidiEvent* events, int eventCount,
     crusher_.process(dryL_.data(), dryR_.data(), n, p.crush);
     squash_.process(dryL_.data(), dryR_.data(), n, p.squash);
 
+    // --- glue: a fully crushed copy blended back under the dry (v0.9) -------
+    const float glueTarget = std::clamp(p.glue, 0.0f, 1.0f);
+    if (glueTarget > 0.0005f || smGlue_ > 0.0005f) {
+        std::copy(dryL_.begin(), dryL_.begin() + n, glueL_.begin());
+        std::copy(dryR_.begin(), dryR_.begin() + n, glueR_.begin());
+        glue_.process(glueL_.data(), glueR_.data(), n, 1.0f);
+    }
+
     // --- room (fed post-bus so the ambience carries the kit's character) ----
     room_.process(dryL_.data(), dryR_.data(), roomL_.data(), roomR_.data(), n);
+
+    // --- plate (v0.9): seconds of hang for the snare, post-bus ---------------
+    const float plateTarget = std::clamp(p.plateLevel, 0.0f, 1.0f);
+    if (p.plateDecay != lastPlateDecay_) { plate_.setDecay(p.plateDecay); lastPlateDecay_ = p.plateDecay; }
+    if (plateTarget > 0.0005f || smPlate_ > 0.0005f)
+        plate_.process(dryL_.data(), dryR_.data(), plateL_.data(), plateR_.data(), n);
+    else
+        std::fill(plateL_.begin(), plateL_.begin() + n, 0.0f), std::fill(plateR_.begin(), plateR_.begin() + n, 0.0f);
 
     const float roomTarget = std::clamp(p.roomLevel, 0.0f, 1.0f);
     const float masterTarget = dbToGain(p.masterGainDb);
@@ -112,9 +135,15 @@ void KitEngine::process(const MidiEvent* events, int eventCount,
     for (int f = 0; f < n; ++f) {
         smRoom_ += sm * (roomTarget - smRoom_);
         smMaster_ += sm * (masterTarget - smMaster_);
+        smGlue_ += sm * (glueTarget - smGlue_);
+        smPlate_ += sm * (plateTarget - smPlate_);
 
-        float l = dryL_[size_t(f)] + roomL_[size_t(f)] * smRoom_;
-        float r = dryR_[size_t(f)] + roomR_[size_t(f)] * smRoom_;
+        float l = dryL_[size_t(f)] + roomL_[size_t(f)] * smRoom_ + plateL_[size_t(f)] * smPlate_;
+        float r = dryR_[size_t(f)] + roomR_[size_t(f)] * smRoom_ + plateR_[size_t(f)] * smPlate_;
+        if (smGlue_ > 0.0005f) {
+            l += glueL_[size_t(f)] * smGlue_ * 0.7f;
+            r += glueR_[size_t(f)] * smGlue_ * 0.7f;
+        }
 
         // Width (mid/side).
         const float mid = 0.5f * (l + r);

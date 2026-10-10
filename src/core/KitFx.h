@@ -13,6 +13,7 @@
 namespace sapp::kit {
 
 namespace detail {
+inline float flushDenormal(float x) noexcept { return std::abs(x) < 1.0e-20f ? 0.0f : x; }
 inline float envCoef(double sampleRate, float ms) noexcept
 {
     return 1.0f - std::exp(-1.0f / (float(sampleRate) * std::max(0.01f, ms) * 0.001f));
@@ -227,6 +228,90 @@ private:
     float damp_[kLines] = {};
     int linePos_[kLines] = {};
     float size_ = 0.4f;
+};
+
+
+// ----------------------------------------------------------------- plate ---
+// v0.9 (MUSIC-QUALITY-PLAN E8): a plate send with real length. The small room
+// tops out at 0.55 s; a snare that wants to hang needs seconds. 8-line FDN
+// with Householder feedback and gently modulated taps (the sappsynth hall,
+// cut down), fed post-bus, 0.4-3.0 s decay, wet hi-cut at 7 kHz.
+class Plate {
+public:
+    void prepare(double sampleRate)
+    {
+        sampleRate_ = sampleRate;
+        static constexpr float baseMs[kLines] = {23.7f, 29.9f, 34.1f, 39.7f, 46.3f, 52.1f, 61.3f, 71.9f};
+        for (int i = 0; i < kLines; ++i) {
+            baseSamples_[i] = float(baseMs[i] * 0.001 * sampleRate);
+            lines_[i].assign(size_t(baseSamples_[i] * 1.3f) + 64, 0.0f);
+            writePos_[i] = 0;
+            damp_[i] = 0.0f;
+            lfoPhase_[i] = float(i) * 0.785f;
+            lfoInc_[i] = float((0.27 + 0.11 * i) * 2.0 * 3.14159265 / sampleRate);
+        }
+        hiCut_ = 1.0f - std::exp(-2.0f * 3.14159265f * 7000.0f / float(sampleRate));
+        hcL_ = hcR_ = 0.0f;
+        setDecay(1.4f);
+    }
+
+    void setDecay(float seconds)
+    {
+        decay_ = std::clamp(seconds, 0.4f, 3.0f);
+        float meanLoss = 0.0f;
+        for (int i = 0; i < kLines; ++i) {
+            delaySamples_[i] = baseSamples_[i];
+            feedback_[i] = std::pow(10.0f, -3.0f * delaySamples_[i] / (decay_ * float(sampleRate_)));
+            meanLoss += 1.0f - feedback_[i] * feedback_[i];
+        }
+        meanLoss /= float(kLines);
+        wetFeed_ = 2.6f * std::sqrt(std::max(meanLoss, 1.0e-4f));
+    }
+
+    float decaySeconds() const noexcept { return decay_; }
+
+    void process(const float* inL, const float* inR, float* outL, float* outR, int frames) noexcept
+    {
+        const float k = 2.0f / float(kLines);
+        for (int f = 0; f < frames; ++f) {
+            const float inMono = 0.5f * (inL[f] + inR[f]) * wetFeed_;
+            float read[kLines];
+            float sum = 0.0f;
+            for (int i = 0; i < kLines; ++i) {
+                lfoPhase_[i] += lfoInc_[i];
+                if (lfoPhase_[i] > 6.2831853f) lfoPhase_[i] -= 6.2831853f;
+                const float delay = delaySamples_[i] + std::sin(lfoPhase_[i]) * 2.5f;
+                const int size = int(lines_[i].size());
+                float pos = float(writePos_[i]) - delay;
+                while (pos < 0.0f) pos += float(size);
+                const int i0 = int(pos);
+                const float frac = pos - float(i0);
+                const int i1 = i0 + 1 >= size ? 0 : i0 + 1;
+                read[i] = lines_[i][size_t(i0)] * (1.0f - frac) + lines_[i][size_t(i1)] * frac;
+                sum += read[i];
+            }
+            for (int i = 0; i < kLines; ++i) {
+                float v = feedback_[i] * (read[i] - k * sum) + inMono;
+                damp_[i] += 0.55f * (v - damp_[i]);
+                v = damp_[i];
+                lines_[i][size_t(writePos_[i])] = detail::flushDenormal(v);
+                if (++writePos_[i] >= int(lines_[i].size())) writePos_[i] = 0;
+            }
+            hcL_ += hiCut_ * ((read[0] - read[2] + read[4] - read[6]) * 0.5f - hcL_);
+            hcR_ += hiCut_ * ((read[1] - read[3] + read[5] - read[7]) * 0.5f - hcR_);
+            outL[f] = hcL_;
+            outR[f] = hcR_;
+        }
+    }
+
+private:
+    static constexpr int kLines = 8;
+    double sampleRate_ = 48000.0;
+    std::vector<float> lines_[kLines];
+    float baseSamples_[kLines] = {}, delaySamples_[kLines] = {}, feedback_[kLines] = {};
+    float damp_[kLines] = {}, lfoPhase_[kLines] = {}, lfoInc_[kLines] = {};
+    int writePos_[kLines] = {};
+    float decay_ = 1.4f, wetFeed_ = 1.0f, hiCut_ = 0.5f, hcL_ = 0.0f, hcR_ = 0.0f;
 };
 
 } // namespace sapp::kit

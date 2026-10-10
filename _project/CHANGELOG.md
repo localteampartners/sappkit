@@ -6,6 +6,19 @@ Newest first. Format: `## YYYY-MM-DD — short title`, then bullets.
 
 ---
 
+## 2026-10-09 — 0.9.0: the drum bus grows a plate and glue
+
+MUSIC-QUALITY-PLAN E8. The small room topped out at 0.55 s, so a snare could
+never hang. `plateLevel` (0-1, SappLink CC 93) + `plateDecay` (0.4-3.0 s,
+CC 20) add a plate send — an 8-line FDN with modulated taps, cut down from
+the sappsynth hall, fed post-bus, wet hi-cut at 7 kHz. `glue` (0-1, CC 19)
+is the New York trick: a fully squashed copy of the bus blended back under
+the dry so the quiet tail comes up without the hit flattening. All three are
+bypassed at 0 — every existing session renders as before. Test:
+`test_kit_engine.cpp` "drum bus (v0.9)". Still open in E8: per-pad EQ /
+comp / saturation, tape glue, factory KitMix presets per style, an
+audio-keyed sidechain source.
+
 ## 2026-10-09 — 0.8.1: rebuilt on SappSounds 0.4 (SFZ filter + LFO opcodes)
 
 No code change here. SappSounds 0.4.0 (MUSIC-QUALITY-PLAN E7) gives every

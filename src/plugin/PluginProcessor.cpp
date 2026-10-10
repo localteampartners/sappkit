@@ -49,6 +49,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout SappKitProcessor::makeLayout
                                    Range{0.0f, 1.0f, 0.001f}, 0.0f));
     layout.add(std::make_unique<P>(juce::ParameterID{"roomLevel", 1}, "Room",
                                    Range{0.0f, 1.0f, 0.001f}, 0.18f));
+    layout.add(std::make_unique<P>(juce::ParameterID{"glue", 1}, "Glue",
+                                   juce::NormalisableRange<float>{0.0f, 1.0f, 0.001f}, 0.0f));
+    layout.add(std::make_unique<P>(juce::ParameterID{"plateLevel", 1}, "Plate",
+                                   juce::NormalisableRange<float>{0.0f, 1.0f, 0.001f}, 0.0f));
+    layout.add(std::make_unique<P>(juce::ParameterID{"plateDecay", 1}, "Plate Decay",
+                                   juce::NormalisableRange<float>{0.4f, 3.0f, 0.01f, 0.6f}, 1.4f));
     layout.add(std::make_unique<P>(juce::ParameterID{"roomSize", 1}, "Room Size",
                                    Range{0.0f, 1.0f, 0.001f}, 0.4f));
     layout.add(std::make_unique<P>(juce::ParameterID{"width", 1}, "Width",
@@ -111,6 +117,9 @@ SappKitProcessor::SappKitProcessor()
     pSquash_ = raw("squash");
     pCrush_ = raw("crush");
     pRoomLevel_ = raw("roomLevel");
+    pGlue_ = raw("glue");
+    pPlateLevel_ = raw("plateLevel");
+    pPlateDecay_ = raw("plateDecay");
     pRoomSize_ = raw("roomSize");
     pWidth_ = raw("width");
     pHumanize_ = raw("humanize");
@@ -437,6 +446,9 @@ void SappKitProcessor::pushParamsToEngine()
     p.squash = pSquash_->load();
     p.crush = pCrush_->load();
     p.roomLevel = pRoomLevel_->load();
+    p.glue = pGlue_->load();
+    p.plateLevel = pPlateLevel_->load();
+    p.plateDecay = pPlateDecay_->load();
     p.roomSize = pRoomSize_->load();
     p.width = pWidth_->load();
     p.humanize = pHumanize_->load();

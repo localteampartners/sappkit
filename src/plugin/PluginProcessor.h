@@ -208,6 +208,9 @@ private:
     std::atomic<float>* pPunch_ = nullptr;
     std::atomic<float>* pSquash_ = nullptr;
     std::atomic<float>* pCrush_ = nullptr;
+    std::atomic<float>* pGlue_ = nullptr;
+    std::atomic<float>* pPlateLevel_ = nullptr;
+    std::atomic<float>* pPlateDecay_ = nullptr;
     std::atomic<float>* pRoomLevel_ = nullptr;
     std::atomic<float>* pRoomSize_ = nullptr;
     std::atomic<float>* pWidth_ = nullptr;
