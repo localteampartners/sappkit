@@ -6,7 +6,12 @@ Newest first. Format: `## YYYY-MM-DD — short title`, then bullets.
 
 ---
 
-## 2026-10-09 — 0.9.0: the drum bus grows a plate and glue
+## 2026-10-09 — 0.9.1: the drum bus grows a plate and glue
+
+(0.9.0 was tagged first and failed its Windows build: the plugin's CC slew
+array was hard-sized to nine mappings and a `static_assert` caught the
+three new rows. It is sized from `kNumMappings` now, and the VST3 was
+compiled on the mac against a local JUCE before this tag.)
 
 MUSIC-QUALITY-PLAN E8. The small room topped out at 0.55 s, so a snare could
 never hang. `plateLevel` (0-1, SappLink CC 93) + `plateDecay` (0.4-3.0 s,

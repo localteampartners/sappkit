@@ -20,6 +20,7 @@
 // instance). juce::Timer survives as an EDITOR hook only — nothing about
 // loading depends on it.
 
+#include "../core/SappLinkCCMap.h"
 #include <array>
 #include <atomic>
 #include <condition_variable>
@@ -254,7 +255,7 @@ private:
         float target = 0.0f, current = 0.0f;
         bool active = false;
     };
-    std::array<CcSlew, 9> ccSlews_;
+    std::array<CcSlew, sapp::kit::sapplink::kNumMappings> ccSlews_;
     void handleSappLinkCc(int ccNumber, int ccValue);
     void advanceCcSlews(int numSamples);
 
