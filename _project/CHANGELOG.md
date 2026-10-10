@@ -6,6 +6,32 @@ Newest first. Format: `## YYYY-MM-DD — short title`, then bullets.
 
 ---
 
+## 2026-10-10 — 0.10.0: Latin Percussion v2 plays every note; percussion pad ranking
+
+- **Latin Percussion v2** (built by `sappsounds/scripts/fetch-library.sh get
+  latin-percussion`, mapping in `sappsounds/kits/latin-percussion/`): 48
+  sounds on GM + documented free notes — congas (mute 62 / open 63 / tumba 64
+  / heel 95), bongos (60/61, muted 85/86), timbales (65/66), bongo bell 56,
+  cha-cha bell 88, muted bell 87, agogô 67/68, cabasa 69, real maracas 70,
+  whistles 71/72, guiro 73/74, claves 75, woodblocks 76/77, cuíca 78/79,
+  triangle 80/81, shaker 82, jingle bell 83, bell tree 84, cajón 35/36/38,
+  cross-stick 37, palmas 39, surdo 41/43/45/47, pandeiro 89/90/91, tamborim
+  92, egg shaker 93, castanets 94, vibraslap 58, tambourine 54. Virtuosity
+  Drums percussion (8 round robins, 2-5 velocity layers, close + overhead
+  mics) + VCSL + FreePats + Body Percussion, all CC0. Same kit name ("Latin
+  Percussion") and file name, so the factory table and sapptune need no change.
+- **Pad ranking for hand-percussion kits.** A kit with no hats/cymbals and 8+
+  notes in 60-77 is ranked by what a percussionist reaches for first
+  (congas, bongos, bell, timbales, claves, maracas, ...), so the 16 pads show
+  the instruments the kit is for instead of its cajón/surdo/clap notes.
+  Drum sets keep the GM drum-set ranking.
+- Proved, not assumed: pads are only a view. New tests render every note
+  sapptune's latin layer emits (36/37/45/54/56/60-77, plus off-pad notes like
+  84/89/92/95) on a 48-sound kit and require each to sound.
+- Measured on the Mac (CLI render, every note at 3 velocities): all 48 sound,
+  hottest single hit -3.8 dBFS; an 8-bar son-clave/tumbao/martillo/bossa
+  groove peaks -3.2 dBFS dry (-0.8 through the default bus + limiter).
+
 ## 2026-10-10 — 0.9.2: plate delay-line over-read
 
 The plate's read position was computed in float, wrapped by adding the line

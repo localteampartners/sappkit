@@ -91,6 +91,33 @@ int padPriority(int note)
     return 1000 + note;
 }
 
+// A hand-percussion kit (Latin Percussion: congas, bongos, timbales, bells)
+// has no hats or cymbals, and ranking it like a drum set fills the 16 pads
+// with its cajon/surdo/clap notes and pushes the congas and timbales — the
+// point of the kit — off the pad grid. Such a kit is ranked by what a
+// percussionist reaches for first. Pads are only a VIEW: every note the SFZ
+// maps still sounds when it is played, on a pad or not.
+int percussionPadPriority(int note)
+{
+    static constexpr int kHand[] = {63, 62, 64, 60, 61, 56, 65, 66, 75, 70,
+                                    54, 69, 36, 37, 73, 67, 68, 76, 77, 74,
+                                    38, 39, 45, 82, 58, 78, 79, 80, 81};
+    for (size_t i = 0; i < sizeof(kHand) / sizeof(kHand[0]); ++i)
+        if (kHand[i] == note) return int(i);
+    if (gmDrumName(note) != nullptr) return 100 + note;
+    return 1000 + note;
+}
+
+bool isHandPercussionKit(const std::vector<int>& keys)
+{
+    int cymbals = 0, latin = 0;
+    for (int k : keys) {
+        if (k == 42 || k == 44 || k == 46 || k == 49 || k == 51 || k == 57) ++cymbals;
+        if (k >= 60 && k <= 77) ++latin;
+    }
+    return cymbals == 0 && latin >= 8;
+}
+
 // "BDrumNewhit_v3_rr1_Sum.wav" → "BDrumNewhit"; used when a note has no GM
 // name. Strips path, extension, and the common vN/rrN/layer suffix tokens.
 std::string cleanSampleName(const std::string& path)
@@ -243,8 +270,10 @@ KitModel buildKitModel(const InstrumentDefinition& def)
     std::vector<int> keys;
     keys.reserve(sounds.size());
     for (const auto& [key, stats] : sounds) keys.push_back(key);
-    std::sort(keys.begin(), keys.end(), [](int a, int b) {
-        const int pa = padPriority(a), pb = padPriority(b);
+    const bool hand = isHandPercussionKit(keys);
+    std::sort(keys.begin(), keys.end(), [hand](int a, int b) {
+        const int pa = hand ? percussionPadPriority(a) : padPriority(a);
+        const int pb = hand ? percussionPadPriority(b) : padPriority(b);
         return pa != pb ? pa < pb : a < b;
     });
     if (keys.size() > size_t(kNumPads)) keys.resize(size_t(kNumPads));

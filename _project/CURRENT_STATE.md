@@ -63,7 +63,9 @@
 - UiShot: offscreen PNG + `--cctest` (CC 7 sweep through processBlock) — PASS,
   and `--presettest` (user-preset round trip end to end) — PASS, 74/74
   parameters restored with max |diff| exactly 0.
-- Tests: 28 Catch2 cases green (chokes, RR, velocity layers, pad mapping,
+- Tests: 38 Catch2 cases green (incl. 2026-10-10: a 48-sound hand-percussion kit
+  ranks congas/bongos/timbales onto the pads, and every mapped note sounds on a pad
+  or not) (chokes, RR, velocity layers, pad mapping,
   overrides, FX audibility, determinism, SappLink drift guard).
 - Demo: `scripts/make_demo.py` renders an 8-bar groove (ghost notes, hat
   chokes, SappLink room/crush/squash automation) through the CLI with the
@@ -73,13 +75,21 @@
 
 - **Environment:** local only (macOS). Plugin copied to user plugin dirs by
   the JUCE copy step on build.
-- **Version / commit:** v0.7.0 (CMake `project(... VERSION ...)` is the single source; the CI release guard reads only that).
+- **Version / commit:** v0.10.0 (CMake `project(... VERSION ...)` is the single source; the CI release guard reads only that).
 
 ## What's in progress
 
 - Nothing mid-flight; v0.1.0 is a complete vertical slice.
 
 ## What's known broken / flaky
+
+- The plugin's GET SOUNDS registry (`SoundsPanel.cpp`) still downloads the
+  6 MB **v1** Latin Percussion zip (sappkit release `samples-v1`). The v2 kit
+  (48 sounds, 2026-10-10) is assembled from four CC0 sources by
+  `sappsounds/scripts/fetch-library.sh get latin-percussion` and cannot be one
+  zip without re-hosting; using GET SOUNDS on it would overwrite v2 with v1.
+  The station never uses GET SOUNDS. Fix: host a v2 zip (all sources are CC0,
+  so re-hosting is allowed) and point the registry at it.
 
 - (SM Drums / Big Rusty registry entries are registered but not yet
   load-tested through the pad mapper — AVL and the diagnostic kit are.)

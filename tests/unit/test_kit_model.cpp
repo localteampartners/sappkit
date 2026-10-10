@@ -197,3 +197,67 @@ TEST_CASE("default overrides return the base instrument unchanged", "[overrides]
     CHECK(rebuilt != inst);
     CHECK(rebuilt->definition.regions.size() == inst->definition.regions.size());
 }
+
+namespace {
+
+// A hand-percussion kit shaped like Latin-Percussion.sfz (v2): no hats or
+// cymbals, 48 sounds from 35 to 95. Every sound reuses the diagnostic kit's
+// conga sample so the test needs no sample files.
+sapp::sounds::InstrumentPtr makeLatinShapedKit()
+{
+    auto base = makeDiagnosticKit();
+    auto inst = std::make_shared<sapp::sounds::LoadedInstrument>(*base);
+    sapp::sounds::RegionDefinition conga;
+    for (const auto& r : base->definition.regions)
+        if (r.loKey == 63) { conga = r; break; }
+    inst->definition.regions.clear();
+    for (int note : {35, 36, 37, 38, 39, 41, 43, 45, 47, 54, 56, 58, 60, 61, 62, 63,
+                     64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
+                     80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95}) {
+        auto r = conga;
+        r.loKey = r.hiKey = r.rootKey = uint8_t(note);
+        r.seqLength = 1;
+        r.seqPosition = 1;
+        inst->definition.regions.push_back(r);
+    }
+    inst->definition.loKeyUsed = 35;
+    inst->definition.hiKeyUsed = 95;
+    return inst;
+}
+
+} // namespace
+
+TEST_CASE("a hand-percussion kit puts congas, bongos and timbales on the pads", "[padmap][latin]")
+{
+    const auto inst = makeLatinShapedKit();
+    const KitModel model = buildKitModel(inst->definition);
+    REQUIRE(model.padCount == 16);
+    CHECK(model.soundCount == 48);
+    // Ranked like a drum SET these lost their pads to cajon/surdo/clap notes.
+    for (int note : {60, 61, 62, 63, 64, 65, 66, 56, 75, 70})
+        CHECK(model.padIndexForNote(note) >= 0);
+    CHECK(model.padIndexForNote(95) < 0);   // overflow trims the exotic tail
+
+    // A drum set with hats keeps the drum-set ranking.
+    const KitModel diag = buildKitModel(makeDiagnosticKit()->definition);
+    CHECK(diag.padIndexForNote(42) >= 0);
+    CHECK(diag.padIndexForNote(46) >= 0);
+}
+
+TEST_CASE("every note the SFZ maps sounds, on a pad or not", "[latin]")
+{
+    // Pads are a VIEW over the instrument. sapptune's latin layer plays GM
+    // notes 36/37/45/54/56/60-77 on this kit; with 48 sounds and 16 pads, most
+    // of them are off the pad grid and must sound anyway.
+    const auto inst = makeLatinShapedKit();
+    const KitModel model = buildKitModel(inst->definition);
+    int offPad = 0;
+    for (int note : {36, 37, 45, 54, 56, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69,
+                     70, 71, 72, 73, 74, 75, 76, 77, 84, 89, 92, 95}) {
+        if (model.padIndexForNote(note) < 0) ++offPad;
+        const auto out = renderKit(inst, singleHit(uint8_t(note)), dryOptions());
+        INFO("note " << note);
+        CHECK(energyOf(out.left) > 1.0e-3);
+    }
+    CHECK(offPad > 0);   // the case this test exists for really happened
+}
